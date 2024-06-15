@@ -1,0 +1,6 @@
+ 
+[workspace]
+members = [
+  "fso_tables",
+  "fso_curves",
+]
