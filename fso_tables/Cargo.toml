@@ -1,0 +1,8 @@
+[package]
+name = "fso_tables"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+fso_tables_macro = { path = "fso_tables_macro" }
+regex = "1.10.5"
