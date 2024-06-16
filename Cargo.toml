@@ -4,3 +4,4 @@ members = [
   "fso_tables",
   "fso_curves",
 ]
+resolver = "2"

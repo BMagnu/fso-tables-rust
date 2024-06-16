@@ -29,7 +29,7 @@ mod tests {
 			name: "".to_string(),
 			keyframes: vec![
 				CurveKeyframe{ x: 0f32, y: 0f32, segment: CurveSegment::Subcurve { curve: "EaseInQuad".to_string() } },
-				CurveKeyframe{ x: 0.5f32, y: 0.5f32, segment: CurveSegment::Polynomial { ease_in: true, degree: 2f32 } },
+				CurveKeyframe{ x: 0.5f32, y: 0.5f32, segment: CurveSegment::Polynomial { ease_in: Some(true), degree: 2f32 } },
 				CurveKeyframe{ x: 1f32, y: 1f32, segment: CurveSegment::Constant }
 			]
 		};
