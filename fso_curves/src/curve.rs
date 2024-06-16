@@ -1,3 +1,4 @@
+use std::ops::Range;
 use std::string::ToString;
 use once_cell::sync::Lazy;
 use strum::IntoEnumIterator;
@@ -71,6 +72,18 @@ impl Curve {
 			//At this point, no keyframe was matched. Should be impossible
 			unreachable!("Keyframe not found");
 		}
+	}
+	
+	pub fn get_bounds(&self) -> (Range<f32>, Range<f32>) {
+		assert!(self.keyframes.len() >= 2);
+		let first = self.keyframes.first().unwrap();
+		let last = self.keyframes.last().unwrap();
+		let x_bounds = first.x..last.x;
+
+		let (min_y, max_y) = self.keyframes.iter().fold((f32::INFINITY, -f32::INFINITY), |(min_y, max_y), kf| (f32::min(min_y, kf.y), f32::max(max_y, kf.y)) );
+		let y_bounds = min_y..max_y;
+
+		(x_bounds, y_bounds)
 	}
 }
 
