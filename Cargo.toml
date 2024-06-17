@@ -2,6 +2,6 @@
 [workspace]
 members = [
   "fso_tables",
-  "fso_curves",
+  "fso_tables_impl",
 ]
 resolver = "2"

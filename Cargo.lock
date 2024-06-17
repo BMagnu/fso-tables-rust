@@ -12,21 +12,21 @@ dependencies = [
 ]
 
 [[package]]
-name = "fso_curves"
+name = "fso_tables"
+version = "0.1.0"
+dependencies = [
+ "fso_tables_macro",
+ "regex",
+]
+
+[[package]]
+name = "fso_tables_impl"
 version = "0.1.0"
 dependencies = [
  "fso_tables",
  "once_cell",
  "strum",
  "strum_macros",
-]
-
-[[package]]
-name = "fso_tables"
-version = "0.1.0"
-dependencies = [
- "fso_tables_macro",
- "regex",
 ]
 
 [[package]]

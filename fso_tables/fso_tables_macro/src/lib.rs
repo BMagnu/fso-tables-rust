@@ -59,7 +59,7 @@ fn fso_table_build_parse(fields: &Vec<TableField>) -> (proc_macro2::TokenStream,
 						}
 						let #name
 						if let Ok(_) = state.consume_string(#fso_name) {
-							#name = Some(<#inner_type as FSOTable<Parser>>::parse(state)?);
+							#name = Some(<#inner_type as fso_tables::FSOTable<Parser>>::parse(state)?);
 							__already_parsed_comments = false;
 							//TODO process __comments, __version_string
 						}
@@ -101,7 +101,7 @@ fn fso_table_build_parse(fields: &Vec<TableField>) -> (proc_macro2::TokenStream,
 						__already_parsed_comments = false;
 						let mut #name = Vec::default();
 						//TODO process __comments, __version_string
-						while let Ok(__new_element_for_vec) = <#inner_type as FSOTable<Parser>>::parse(state) {
+						while let Ok(__new_element_for_vec) = <#inner_type as fso_tables::FSOTable<Parser>>::parse(state) {
 							#name.push(__new_element_for_vec);
 						}
 					)
@@ -114,9 +114,9 @@ fn fso_table_build_parse(fields: &Vec<TableField>) -> (proc_macro2::TokenStream,
 				let fso_name_parse = match &field.fso_name {
 					Named { fso_name } => { quote! {
 						state.consume_string(#fso_name)?;
-						let #name = <#path as FSOTable<Parser>>::parse(state)?;
+						let #name = <#path as fso_tables::FSOTable<Parser>>::parse(state)?;
 					} }
-					Unnamed => { quote!( let #name = <#path as FSOTable<Parser>>::parse(state)?; ) }
+					Unnamed => { quote!( let #name = <#path as fso_tables::FSOTable<Parser>>::parse(state)?; ) }
 					ExistenceIsBool { fso_name } => {
 						match &field.rust_type {
 							Type::Path( TypePath { path: Path { segments, .. }, ..} ) if segments.last().map_or(false, |outer_type| outer_type.ident == "bool") => {
@@ -182,7 +182,7 @@ fn fso_enum_build_variant_parse(ident: &Ident, field_type: &Type) -> proc_macro2
 			if let GenericArgument::Type(inner_type) = &angle_brackets {
 				quote! {
 					#ident: { 
-						if let Ok(data) = <#inner_type as FSOTable<Parser>>::parse(state) {
+						if let Ok(data) = <#inner_type as fso_tables::FSOTable<Parser>>::parse(state) {
 							Some(data)
 						}
 						else { None }
@@ -194,7 +194,7 @@ fn fso_enum_build_variant_parse(ident: &Ident, field_type: &Type) -> proc_macro2
 		}
 		_ => { 
 			quote! {
-				#ident: { <#field_type as FSOTable<Parser>>::parse(state)? }
+				#ident: { <#field_type as fso_tables::FSOTable<Parser>>::parse(state)? }
 			}
 		}
 	}
@@ -457,7 +457,7 @@ pub fn fso_table(args: TokenStream, input: TokenStream) -> TokenStream  {
 	let mut item = parse_macro_input!(input as Item);
 	let mut post_item_out = proc_macro2::TokenStream::new();
 
-	let mut required_parser_traits: Vec<proc_macro2::TokenStream> = vec![quote!(FSOParser<'parser>)];
+	let mut required_parser_traits: Vec<proc_macro2::TokenStream> = vec![quote!(fso_tables::FSOParser<'parser>)];
 	let mut required_lifetimes: Vec<proc_macro2::TokenStream> = vec![];
 	
 	let mut enum_prefix = "".to_string();
