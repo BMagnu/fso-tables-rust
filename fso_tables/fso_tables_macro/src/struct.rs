@@ -1,6 +1,6 @@
 use proc_macro2::TokenStream;
 use quote::quote;
-use syn::{Error, Expr, ExprLit, ItemStruct, Lit, Meta, MetaNameValue};
+use syn::{Error, Expr, ExprLit, ItemStruct, Lit, Meta, MetaNameValue, Type};
 use syn::spanned::Spanned;
 use crate::FSONaming::{ExistenceIsBool, Named, Unnamed};
 use crate::TableField;
@@ -72,17 +72,14 @@ pub fn fso_struct_build_parse(fields: &Vec<TableField>) -> Result<(TokenStream, 
 			}
 			ExistenceIsBool { fso_name } => {
 				match value_type {
-					FSOValueType::Option { .. } => {
-						return Err(Error::new(field.rust_span, "Options cannot be marked existence-bool'd!"));
-					}
-					FSOValueType::Vector { .. } => {
-						return Err(Error::new(field.rust_span, "Vectors cannot be marked existence-bool'd!"));
-					}
-					_ => {
+					FSOValueType::Direct { ty: Type::Path( path ) } if path.path.is_ident("bool") => {
 						quote!{
 							__already_parsed_comments = false;
 							let #name = state.consume_string(#fso_name).is_ok();
 						}
+					}
+					_ => {
+						return Err(Error::new(field.rust_span, "Only variables of type bool can be existence-bool'd!"));
 					}
 				}
 			}
@@ -131,7 +128,7 @@ pub fn fso_table_struct(item_struct: &mut ItemStruct, instancing_req: Vec<TokenS
 				}
 				_ => { None }
 			});
-			let existance_is_bool = field.attrs.iter().find_map(|a| match &a.meta {
+			let existence_is_bool = field.attrs.iter().find_map(|a| match &a.meta {
 				Meta::Path( path ) if path.is_ident("existence") => {
 					Some(())
 				}
@@ -149,7 +146,7 @@ pub fn fso_table_struct(item_struct: &mut ItemStruct, instancing_req: Vec<TokenS
 
 				if unnamed.is_none() {
 					let actual_name = forced_table_name.unwrap_or(Ok("$".to_string() + &rust_token[..1].to_string().to_uppercase() + &rust_token[1..] + ":"))?;
-					if existance_is_bool.is_none() {
+					if existence_is_bool.is_none() {
 						fso_name = Named { fso_name: actual_name };
 					}
 					else {
