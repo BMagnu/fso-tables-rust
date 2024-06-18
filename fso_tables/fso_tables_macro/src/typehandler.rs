@@ -1,18 +1,20 @@
 use proc_macro2::{Ident, TokenStream};
 use quote::{quote};
-use syn::{GenericArgument, Path, Type, TypePath, Error};
+use syn::{GenericArgument, Path, Type, TypePath, Error, TypeTuple};
 use syn::PathArguments::AngleBracketed;
 use syn::spanned::Spanned;
 
-pub enum FSOValueType<'a> {
+#[allow(dead_code)]
+pub(crate) enum FSOValueType<'a> {
 	Direct {ty: &'a Type},
 	Generic {ty: &'a Type},
 	Vector {inner: &'a Type},
 	Option {inner: &'a Type},
-	Container {inner: &'a Type, container: &'a Ident}
+	Container {inner: &'a Type, container: &'a Ident},
+	Tuple {inner: Vec<FSOValueType<'a>>}
 }
 
-pub fn deduce_type(ty: &Type) -> Result<(FSOValueType, TokenStream), Error>{
+pub(crate) fn deduce_type(ty: &Type) -> Result<(FSOValueType, TokenStream), Error>{
 	match ty {
 		Type::Path( TypePath { path: Path { segments, .. }, ..} ) => {
 			assert!(!segments.is_empty());
@@ -50,7 +52,10 @@ pub fn deduce_type(ty: &Type) -> Result<(FSOValueType, TokenStream), Error>{
 							Ok((FSOValueType::Option { inner }, make_value))
 						}
 						"Box" | "Rc" | "Arc" | "Cell" | "RefCell" => {
-							let (_, make_containing) = deduce_type(inner)?;
+							let (inner_type, make_containing) = deduce_type(inner)?;
+							if let FSOValueType::Option { .. } = inner_type {
+								return Err(Error::new(inner.span(), "FSO Tables cannot contain a Box-like of Options. Consider reversing the template order."));
+							}
 							
 							let container = &typename.ident;
 							let make_value = quote!(#make_containing.map(|containing| #container::new(containing)));
@@ -70,6 +75,28 @@ pub fn deduce_type(ty: &Type) -> Result<(FSOValueType, TokenStream), Error>{
 				let make_value = quote! (<#ty as fso_tables::FSOTable<Parser>>::parse(state));
 				Ok((FSOValueType::Direct { ty }, make_value))
 			}
+		}
+		Type::Tuple( TypeTuple { elems, .. } ) => {
+			let mut types: Vec<FSOValueType> = Vec::new();
+			let mut parser = quote!();
+
+			for inner in elems {
+				let (inner_type, make_containing) = deduce_type(inner)?;
+				if let FSOValueType::Option { .. } = inner_type {
+					return Err(Error::new(inner.span(), "FSO Tables cannot yet contain Options."));
+				}
+				types.push(inner_type);
+				parser = quote!{
+					#parser
+					#make_containing?,
+				};
+			}
+			Ok((FSOValueType::Tuple { inner: types }, quote!{ (|| {
+				state.consume_whitespace_inline(&['(']);
+				let __tuple_result = Ok((#parser));
+				state.consume_whitespace_inline(&[')']);
+				__tuple_result
+			})() }))
 		}
 		_ => {
 			Err(Error::new(ty.span(), "FSO Tables can only process path and tuple types"))

@@ -3,8 +3,8 @@ mod r#struct;
 mod r#enum;
 mod util;
 
-use proc_macro2::{Ident, Span, TokenStream};
-use syn::{parse_macro_input, Item, Path, Type, Token, PathSegment, parenthesized, LifetimeParam, LitStr, Error};
+use proc_macro2::TokenStream;
+use syn::{parse_macro_input, Item, Path, Token, PathSegment, parenthesized, LifetimeParam, LitStr, Error};
 use quote::quote;
 use syn::parse::{Parse, ParseStream};
 use syn::punctuated::Punctuated;
@@ -12,19 +12,6 @@ use syn::spanned::Spanned;
 use syn::token::PathSep;
 use crate::r#struct::*;
 use crate::r#enum::*;
-
-enum FSONaming {
-	Named { fso_name: String },
-	Unnamed,
-	ExistenceIsBool { fso_name: String }
-}
-
-struct TableField {
-	fso_name: FSONaming,
-	rust_token: Ident,
-	rust_type: Type,
-	rust_span: Span
-}
 
 #[proc_macro_attribute]
 pub fn fso_table(args: proc_macro::TokenStream, input: proc_macro::TokenStream) -> proc_macro::TokenStream  {

@@ -1,13 +1,25 @@
-use proc_macro2::TokenStream;
+use proc_macro2::{Ident, Span, TokenStream};
 use quote::quote;
 use syn::{Error, Expr, ExprLit, ItemStruct, Lit, Meta, MetaNameValue, Type};
 use syn::spanned::Spanned;
-use crate::FSONaming::{ExistenceIsBool, Named, Unnamed};
-use crate::TableField;
 use crate::typehandler::{deduce_type, FSOValueType};
 use crate::util::{fso_build_impl_generics, fso_build_where_clause};
 
-pub fn fso_struct_build_parse(fields: &Vec<TableField>) -> Result<(TokenStream, TokenStream), Error> {
+enum FSONaming {
+	Named { fso_name: String },
+	Unnamed,
+	ExistenceIsBool { fso_name: String }
+}
+
+pub(crate) struct TableField {
+	fso_name: FSONaming,
+	fso_gobble: Option<String>,
+	rust_token: Ident,
+	rust_type: Type,
+	rust_span: Span
+}
+
+pub(crate) fn fso_struct_build_parse(fields: &Vec<TableField>) -> Result<(TokenStream, TokenStream), Error> {
 	let mut parse = quote! {
 		let mut __already_parsed_comments = false;
 		let (mut __comments, mut __version_string) = (None, None);
@@ -23,16 +35,28 @@ pub fn fso_struct_build_parse(fields: &Vec<TableField>) -> Result<(TokenStream, 
 			}	
 		};
 
+		let parse_gobble = if let Some(gobble) = &field.fso_gobble {
+			quote! {
+				state.consume_whitespace_inline(&[]);
+				state.consume_string(#gobble)?;
+			}
+		}
+		else {
+			quote!()
+		};
+
 		let (value_type, make_type) = deduce_type(&field.rust_type)?;
 		let parse_value = match &field.fso_name {
-			Named { fso_name } => {
+			FSONaming::Named { fso_name } => {
 				match value_type {
 					FSOValueType::Option { .. } => {
 						quote!{
 							let #name = if let Ok(_) = state.consume_string(#fso_name) {
 								__already_parsed_comments = false;
 								//TODO process __comments, __version_string
-								Some(#make_type?) //Named Optionals must be parseable
+								let __opt_result = Some(#make_type?); //Named Optionals must be parseable
+								#parse_gobble
+								__opt_result
 							}
 							else {
 								None()
@@ -44,17 +68,19 @@ pub fn fso_struct_build_parse(fields: &Vec<TableField>) -> Result<(TokenStream, 
 							__already_parsed_comments = false;
 							state.consume_string(#fso_name)?;
 							let #name = #make_type?;
+							#parse_gobble
 						}
 					}
 				}
 			}
-			Unnamed => {
+			FSONaming::Unnamed => {
 				match value_type {
 					FSOValueType::Option { .. } => {
 						quote!{
 							let #name = if let Ok(data) = #make_type { //Unnamed Optionals can fail during parsing itself, that's assumed to be "non-existant"
 								__already_parsed_comments = false;
 								//TODO process __comments, __version_string
+								#parse_gobble
 								Some(data)
 							}
 							else {
@@ -66,16 +92,20 @@ pub fn fso_struct_build_parse(fields: &Vec<TableField>) -> Result<(TokenStream, 
 						quote!{
 							__already_parsed_comments = false;
 							let #name = #make_type?;
+							#parse_gobble
 						}
 					}
 				}
 			}
-			ExistenceIsBool { fso_name } => {
+			FSONaming::ExistenceIsBool { fso_name } => {
 				match value_type {
 					FSOValueType::Direct { ty: Type::Path( path ) } if path.path.is_ident("bool") => {
 						quote!{
 							__already_parsed_comments = false;
 							let #name = state.consume_string(#fso_name).is_ok();
+							if #name {
+								#parse_gobble
+							}
 						}
 					}
 					_ => {
@@ -100,7 +130,7 @@ pub fn fso_struct_build_parse(fields: &Vec<TableField>) -> Result<(TokenStream, 
 	Ok((parse, fill))
 }
 
-pub fn fso_table_struct(item_struct: &mut ItemStruct, instancing_req: Vec<TokenStream>, lifetime_req: Vec<TokenStream>, table_prefix: Option<String>, table_suffix: Option<String>) -> Result<TokenStream, Error> {
+pub(crate) fn fso_table_struct(item_struct: &mut ItemStruct, instancing_req: Vec<TokenStream>, lifetime_req: Vec<TokenStream>, table_prefix: Option<String>, table_suffix: Option<String>) -> Result<TokenStream, Error> {
 	let mut table_fields: Vec<TableField> = Vec::new();
 	let struct_name = &item_struct.ident;
 	let (_, ty_generics, where_clause) = item_struct.generics.split_for_impl();
@@ -116,6 +146,20 @@ pub fn fso_table_struct(item_struct: &mut ItemStruct, instancing_req: Vec<TokenS
 				}
 				_ => { None }
 			});
+			let fso_gobble = if let Some(gobble) = field.attrs.iter().find_map(|a| match &a.meta {
+				Meta::NameValue( MetaNameValue { value: Expr::Lit( ExprLit{ lit: Lit::Str(new_name), ..}), .. })
+				if a.meta.path().is_ident("gobble") => { Some(Ok(new_name.value())) },
+				_ if a.meta.path().is_ident("gobble") => {
+					return Some(Err(Error::new(a.span(), "Attribute gobble must have a value!")));
+				}
+				_ => { None }
+			}) {
+				Some(gobble?)
+			}
+			else {
+				None
+			};
+
 			let skip = field.attrs.iter().find_map(|a| match &a.meta {
 				Meta::Path( path ) if path.is_ident("skip") => {
 					Some(())
@@ -134,7 +178,12 @@ pub fn fso_table_struct(item_struct: &mut ItemStruct, instancing_req: Vec<TokenS
 				}
 				_ => { None }
 			});
-			field.attrs.retain(|a| !(a.path().is_ident("fso_name") || a.path().is_ident("skip") || a.path().is_ident("unnamed") || a.path().is_ident("existence")));
+			field.attrs.retain(|a| !(
+				a.path().is_ident("fso_name") ||
+				a.path().is_ident("gobble") ||
+				a.path().is_ident("skip") ||
+				a.path().is_ident("unnamed") ||
+				a.path().is_ident("existence")));
 
 			if skip.is_some() {
 				continue;
@@ -147,17 +196,17 @@ pub fn fso_table_struct(item_struct: &mut ItemStruct, instancing_req: Vec<TokenS
 				if unnamed.is_none() {
 					let actual_name = forced_table_name.unwrap_or(Ok("$".to_string() + &rust_token[..1].to_string().to_uppercase() + &rust_token[1..] + ":"))?;
 					if existence_is_bool.is_none() {
-						fso_name = Named { fso_name: actual_name };
+						fso_name = FSONaming::Named { fso_name: actual_name };
 					}
 					else {
-						fso_name = ExistenceIsBool { fso_name: actual_name };
+						fso_name = FSONaming::ExistenceIsBool { fso_name: actual_name };
 					}
 				}
 				else {
-					fso_name = Unnamed;
+					fso_name = FSONaming::Unnamed;
 				}
 
-				table_fields.push(TableField { fso_name, rust_token: ident.clone(), rust_type, rust_span: field.span() });
+				table_fields.push(TableField { fso_name, fso_gobble, rust_token: ident.clone(), rust_type, rust_span: field.span() });
 			}
 		}
 		/*fields.named.push(

@@ -25,8 +25,7 @@ pub static BUILTIN_CURVES: Lazy<Vec<Curve>> = Lazy::new(|| {
 				let ease_in = Some(ease != EASE::EaseOut);
 
 				keyframes.push(CurveKeyframe {
-					x: 0f32,
-					y: if reverse { 1f32 } else { 0f32 },
+					pos: (0f32, if reverse { 1f32 } else { 0f32 }),
 					segment: match interptype {
 						TYPE::Circ => {
 							CurveSegment::Circular { ease_in }
@@ -39,8 +38,7 @@ pub static BUILTIN_CURVES: Lazy<Vec<Curve>> = Lazy::new(|| {
 
 				if ease == EASE::EaseInOut {
 					keyframes.push(CurveKeyframe {
-						x: 0.5f32,
-						y: 0.5f32,
+						pos: (0.5f32, 0.5f32),
 						segment: match interptype {
 							TYPE::Circ => {
 								CurveSegment::Circular { ease_in: Some(!ease_in.unwrap()) }
@@ -53,8 +51,7 @@ pub static BUILTIN_CURVES: Lazy<Vec<Curve>> = Lazy::new(|| {
 				}
 
 				keyframes.push(CurveKeyframe {
-					x: 1f32,
-					y: if reverse { 0f32 } else { 1f32 },
+					pos: (1f32, if reverse { 0f32 } else { 1f32 }),
 					segment: CurveSegment::Constant {}
 				});
 

@@ -5,7 +5,7 @@ use syn::spanned::Spanned;
 use crate::typehandler::{deduce_type, FSOValueType};
 use crate::util::{fso_build_impl_generics, fso_build_where_clause};
 
-pub fn fso_enum_build_parse(fields: &Fields, default_enum_case_store_in: bool) -> Result<TokenStream, Error> {
+pub(crate) fn fso_enum_build_parse(fields: &Fields, default_enum_case_store_in: bool) -> Result<TokenStream, Error> {
 	let mut field_parsers = quote!();
 	for field in fields{
 		if let Some(ident) = &field.ident {

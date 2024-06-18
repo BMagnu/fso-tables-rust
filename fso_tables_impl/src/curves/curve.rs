@@ -1,7 +1,7 @@
 use std::ops::Range;
 use std::string::ToString;
 
-use fso_tables::{fso_table, FSOParser, FSOParsingError, FSOTable};
+use fso_tables::fso_table;
 
 #[fso_table]
 pub struct Curve {
@@ -10,25 +10,13 @@ pub struct Curve {
 	pub keyframes: Vec<CurveKeyframe>
 }
 
+#[fso_table]
 pub struct CurveKeyframe {
-	pub x: f32,
-	pub y: f32,
+	#[unnamed]
+	#[gobble=":"]
+	pub pos: (f32, f32),
+	#[unnamed]
 	pub segment: CurveSegment
-}
-impl<'parser, Parser: FSOParser<'parser>> FSOTable<'parser, Parser> for CurveKeyframe {
-	fn parse(state: &'parser Parser) -> Result<Self, FSOParsingError> {
-		state.consume_whitespace(false);
-		state.consume_string("(")?;
-		let x = <f32 as FSOTable<Parser>>::parse(state)?;
-		let y = <f32 as FSOTable<Parser>>::parse(state)?;
-		state.consume_whitespace_inline(&[]);
-		state.consume_string("):")?;
-		state.consume_whitespace_inline(&[]);
-		let segment = <CurveSegment as FSOTable<Parser>>::parse(state)?;
-		Ok(CurveKeyframe { x, y, segment })
-	}
-
-	fn dump(&self) { }
 }
 
 #[fso_table]
@@ -45,14 +33,14 @@ impl Curve {
 	pub fn calculate(&self, x: f32, curves: &Vec<&Curve>) -> f32 {
 		assert!(self.keyframes.len() >= 2);
 
-		if self.keyframes[0].x > x {
-			return self.keyframes[0].y;
+		if self.keyframes[0].pos.0 > x {
+			return self.keyframes[0].pos.1;
 		}
-		else if self.keyframes[self.keyframes.len() - 1].x <= x {
-			return self.keyframes[self.keyframes.len() - 1].y;
+		else if self.keyframes[self.keyframes.len() - 1].pos.0 <= x {
+			return self.keyframes[self.keyframes.len() - 1].pos.1;
 		}
 
-		let result = self.keyframes[1..].iter().enumerate().find(|(_, kf)| x < kf.x).map(|(prev_index, kf)| {
+		let result = self.keyframes[1..].iter().enumerate().find(|(_, kf)| x < kf.pos.0).map(|(prev_index, kf)| {
 			let prev_kf = &self.keyframes[prev_index];
 			prev_kf.segment.calculate(x, prev_kf, kf, curves)
 		});
@@ -70,9 +58,9 @@ impl Curve {
 		assert!(self.keyframes.len() >= 2);
 		let first = self.keyframes.first().unwrap();
 		let last = self.keyframes.last().unwrap();
-		let x_bounds = first.x..last.x;
+		let x_bounds = first.pos.0..last.pos.0;
 
-		let (min_y, max_y) = self.keyframes.iter().fold((f32::INFINITY, -f32::INFINITY), |(min_y, max_y), kf| (f32::min(min_y, kf.y), f32::max(max_y, kf.y)) );
+		let (min_y, max_y) = self.keyframes.iter().fold((f32::INFINITY, -f32::INFINITY), |(min_y, max_y), kf| (f32::min(min_y, kf.pos.1), f32::max(max_y, kf.pos.1)) );
 		let y_bounds = min_y..max_y;
 
 		(x_bounds, y_bounds)
@@ -82,15 +70,15 @@ impl Curve {
 impl Default for Curve {
 	fn default() -> Self { 
 		Curve { name: "".to_string(), keyframes: vec![
-			CurveKeyframe { x: 0f32, y: 0f32, segment: CurveSegment::Linear },
-			CurveKeyframe { x: 1f32, y: 1f32, segment: CurveSegment::Constant }
+			CurveKeyframe { pos: (0f32, 0f32), segment: CurveSegment::Linear },
+			CurveKeyframe { pos: (1f32, 1f32), segment: CurveSegment::Constant }
 		]} 
 	}
 }
 
 impl CurveSegment {
 	pub fn calculate(&self, x: f32, current: &CurveKeyframe, next: &CurveKeyframe, curves: &Vec<&Curve>) -> f32 {
-		self.calculate_from_delta((x - current.x) / (next.x - current.x), curves) * (next.y - current.y) + current.y
+		self.calculate_from_delta((x - current.pos.0) / (next.pos.0 - current.pos.0), curves) * (next.pos.1 - current.pos.1) + current.pos.1
 	}
 	
 	fn calculate_from_delta(&self, t: f32, curves: &Vec<&Curve>) -> f32 {
