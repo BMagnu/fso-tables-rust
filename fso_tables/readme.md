@@ -60,10 +60,13 @@ Available annotations are:
 For annotated structs only:
 - ``table_start="<value>"``: Requires a token ``<value>`` when parsing of this struct begins.
 - ``table_end="<value>"``: Requires a token ``<value>`` when parsing of this struct ends.
+- ``prefix="<value>"``: What is appended before the name of a field when parsing. Defaults to ``$``. Can be combined with the following to, for example, result in ``$<VariantName>:`` keys.
+- ``suffix="<value>"``: What is appended before the name of a field when parsing. Defaults to ``:``.
 
 For annotated enums only:
-- ``prefix="<value>"``: What is appended before the name of an enum variant when parsing. ``$`` by default, in order to result in ``$<VariantName>:`` keys.
-- ``suffix="<value>"``: What is appended before the name of an enum variant when parsing. ``:`` by default.
+- ``prefix="<value>"``: What is appended before the name of an enum variant when parsing. Can be combined with the following to, for example, result in ``$<VariantName>:`` keys.
+- ``suffix="<value>"``: What is appended before the name of an enum variant when parsing.
+- ``flagset``: Converts all CamelCase enum variant names to spaced lower case as needed to parse flagsets.
 
 ## Field Modifiers:
 
@@ -77,4 +80,5 @@ For fields of structs:
 - ``existence``: Interprets the presence of a key with the given name at this point in the table as a value of ``true``. Can only be used for fields with the type ``bool``.
 
 For variants of types:
-- ``use_as_default_string``: Marks the last variant of the enum as the default case. If no prior variant matched, the current token will be stored as a ``String`` in the last enum variant instead of erroring. 
+- ``use_as_default_string``: Marks the last variant of the enum as the default case. If no prior variant matched, the current token will be stored as a ``String`` in the last enum variant instead of erroring.
+- ``fso_name="<value>"``: As above. Is applied before ``prefix`` and ``suffix``.

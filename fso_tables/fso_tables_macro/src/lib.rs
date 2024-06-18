@@ -20,11 +20,13 @@ pub fn fso_table(args: proc_macro::TokenStream, input: proc_macro::TokenStream) 
 	let mut required_parser_traits: Vec<TokenStream> = vec![quote!(fso_tables::FSOParser<'parser>)];
 	let mut required_lifetimes: Vec<TokenStream> = vec![];
 	
-	let mut enum_prefix = "".to_string();
-	let mut enum_suffix = "".to_string();
+	let mut prefix :Option<String> = None;
+	let mut suffix :Option<String> = None;
 
 	let mut table_prefix :Option<String> = None;
 	let mut table_suffix :Option<String> = None;
+
+	let mut flagset_naming = false;
 	
 	struct ReqTraitParser {
 		data: Punctuated<PathSegment, PathSep>
@@ -58,11 +60,11 @@ pub fn fso_table(args: proc_macro::TokenStream, input: proc_macro::TokenStream) 
 			Ok(())
 		}
 		else if meta.path.is_ident("prefix") {
-			enum_prefix = meta.value()?.parse::<LitStr>()?.value();
+			prefix = Some(meta.value()?.parse::<LitStr>()?.value());
 			Ok(())
 		}
 		else if meta.path.is_ident("suffix") {
-			enum_suffix = meta.value()?.parse::<LitStr>()?.value();
+			suffix = Some(meta.value()?.parse::<LitStr>()?.value());
 			Ok(())
 		}
 		else if meta.path.is_ident("table_start") {
@@ -73,6 +75,10 @@ pub fn fso_table(args: proc_macro::TokenStream, input: proc_macro::TokenStream) 
 			table_suffix = Some(meta.value()?.parse::<LitStr>()?.value());
 			Ok(())
 		}
+		else if meta.path.is_ident("flagset") {
+			flagset_naming = true;
+			Ok(())
+		}
 		else {
 			Err(meta.error("Unsupported FSO table property"))
 		}
@@ -81,10 +87,10 @@ pub fn fso_table(args: proc_macro::TokenStream, input: proc_macro::TokenStream) 
 
 	let result = match &mut item {
 		Item::Struct(item_struct) => {
-			fso_table_struct(item_struct, required_parser_traits, required_lifetimes, table_prefix, table_suffix)
+			fso_table_struct(item_struct, required_parser_traits, required_lifetimes, table_prefix, table_suffix, prefix, suffix)
 		}
 		Item::Enum(item_enum) => {
-			fso_table_enum(item_enum, required_parser_traits, required_lifetimes, enum_prefix, enum_suffix)
+			fso_table_enum(item_enum, required_parser_traits, required_lifetimes, prefix.unwrap_or("".to_string()), suffix.unwrap_or("".to_string()), flagset_naming)
 		}
 		_ => {
 			Err(Error::new(item.span(), "Can only annotate structs and enums!"))

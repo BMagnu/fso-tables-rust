@@ -1,5 +1,6 @@
 use proc_macro2::{Ident, Span, TokenStream};
 use quote::quote;
+use regex::Regex;
 use syn::{Error, Expr, ExprLit, ItemStruct, Lit, Meta, MetaNameValue, Type};
 use syn::spanned::Spanned;
 use crate::typehandler::{deduce_type, FSOValueType};
@@ -141,7 +142,7 @@ pub(crate) fn fso_struct_build_parse(fields: &Vec<TableField>) -> Result<(TokenS
 	Ok((parse, fill))
 }
 
-pub(crate) fn fso_table_struct(item_struct: &mut ItemStruct, instancing_req: Vec<TokenStream>, lifetime_req: Vec<TokenStream>, table_prefix: Option<String>, table_suffix: Option<String>) -> Result<TokenStream, Error> {
+pub(crate) fn fso_table_struct(item_struct: &mut ItemStruct, instancing_req: Vec<TokenStream>, lifetime_req: Vec<TokenStream>, table_prefix: Option<String>, table_suffix: Option<String>, prefix: Option<String>, suffix: Option<String>) -> Result<TokenStream, Error> {
 	let mut table_fields: Vec<TableField> = Vec::new();
 	let struct_name = &item_struct.ident;
 	let (_, ty_generics, where_clause) = item_struct.generics.split_for_impl();
@@ -204,7 +205,18 @@ pub(crate) fn fso_table_struct(item_struct: &mut ItemStruct, instancing_req: Vec
 					fso_name = FSONaming::Skipped;
 				}
 				else if unnamed.is_none() {
-					let actual_name = forced_table_name.unwrap_or(Ok("$".to_string() + &rust_token[..1].to_string().to_uppercase() + &rust_token[1..] + ":"))?;
+					thread_local! { static UNDERSCORE_REGEX: Regex = Regex::new(r"([^_]+)").unwrap(); }
+
+					let mut out_name = "".to_string();
+					UNDERSCORE_REGEX.with(|regex| {
+						for (number, name_part) in regex.find_iter(&rust_token).enumerate() {
+							out_name = format!("{}{}{}{}", out_name, if number == 0 { "" } else { " " }, name_part.as_str()[..1].to_uppercase(), &name_part.as_str()[1..]);
+						}
+					});
+
+					let actual_name = forced_table_name.unwrap_or(
+						Ok(format!("{}{}{}", prefix.clone().unwrap_or("$".to_string()), out_name, suffix.clone().unwrap_or(":".to_string())))
+					)?;
 					if existence_is_bool.is_none() {
 						fso_name = FSONaming::Named { fso_name: actual_name };
 					}
