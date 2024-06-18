@@ -43,7 +43,7 @@ pub fn fso_struct_build_parse(fields: &Vec<TableField>) -> Result<(TokenStream, 
 						quote!{
 							__already_parsed_comments = false;
 							state.consume_string(#fso_name)?;
-							let #name = #make_type;
+							let #name = #make_type?;
 						}
 					}
 				}
@@ -65,7 +65,7 @@ pub fn fso_struct_build_parse(fields: &Vec<TableField>) -> Result<(TokenStream, 
 					_ => {
 						quote!{
 							__already_parsed_comments = false;
-							let #name = #make_type;
+							let #name = #make_type?;
 						}
 					}
 				}

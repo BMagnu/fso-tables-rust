@@ -27,7 +27,7 @@ pub fn fso_enum_build_parse(fields: &Fields, default_enum_case_store_in: bool) -
 					_ => {
 						field_parsers = quote! {
 							#field_parsers
-							#ident: #field_parser,
+							#ident: #field_parser?,
 						};
 					}
 				}
