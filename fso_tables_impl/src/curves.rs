@@ -1,15 +1,11 @@
+mod table;
 mod curve;
 mod builtins;
 
-pub use builtins::*;
+pub use table::*;
+#[allow(unused_imports)]
 pub use curve::*;
-
-use fso_tables::fso_table;
-#[fso_table(table_start="#Curves", table_end="#End")]
-pub struct CurveTable {
-	#[unnamed]
-	pub curves: Vec<Curve>
-}
+pub use builtins::*;
 
 #[cfg(test)]
 mod tests {

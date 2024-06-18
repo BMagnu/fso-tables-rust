@@ -1,33 +1,7 @@
 use std::ops::Range;
 use std::string::ToString;
 
-use fso_tables::fso_table;
-
-#[fso_table]
-pub struct Curve {
-	pub name: String,
-	#[fso_name="$KeyFrames:"]
-	pub keyframes: Vec<CurveKeyframe>
-}
-
-#[fso_table]
-pub struct CurveKeyframe {
-	#[unnamed]
-	#[gobble=":"]
-	pub pos: (f32, f32),
-	#[unnamed]
-	pub segment: CurveSegment
-}
-
-#[fso_table]
-pub enum CurveSegment{
-	Constant,
-	Linear,
-	Polynomial { degree: f32, ease_in: Option<bool> },
-	Circular { ease_in: Option<bool> },
-	#[use_as_default_string]
-	Subcurve { curve: String }
-}
+use crate::curves::*;
 
 impl Curve {
 	pub fn calculate(&self, x: f32, curves: &Vec<&Curve>) -> f32 {
@@ -66,7 +40,6 @@ impl Curve {
 		(x_bounds, y_bounds)
 	}
 }
-
 impl Default for Curve {
 	fn default() -> Self { 
 		Curve { name: "".to_string(), keyframes: vec![
