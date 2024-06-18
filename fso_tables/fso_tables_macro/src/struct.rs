@@ -8,7 +8,8 @@ use crate::util::{fso_build_impl_generics, fso_build_where_clause};
 enum FSONaming {
 	Named { fso_name: String },
 	Unnamed,
-	ExistenceIsBool { fso_name: String }
+	ExistenceIsBool { fso_name: String },
+	Skipped
 }
 
 pub(crate) struct TableField {
@@ -28,6 +29,15 @@ pub(crate) fn fso_struct_build_parse(fields: &Vec<TableField>) -> Result<(TokenS
 
 	for (_field_num, field) in fields.iter().enumerate() {
 		let name = &field.rust_token;
+
+		if let FSONaming::Skipped = field.fso_name {
+			let typename = &field.rust_type;
+			fill = quote!(
+				#fill
+				#name: #typename::default(),
+			);
+			continue;
+		}
 
 		let parse_comments = quote!{
 			if !__already_parsed_comments {
@@ -113,6 +123,7 @@ pub(crate) fn fso_struct_build_parse(fields: &Vec<TableField>) -> Result<(TokenS
 					}
 				}
 			}
+			FSONaming::Skipped => { unreachable!() }
 		};
 
 		parse = quote!(
@@ -185,15 +196,14 @@ pub(crate) fn fso_table_struct(item_struct: &mut ItemStruct, instancing_req: Vec
 				a.path().is_ident("unnamed") ||
 				a.path().is_ident("existence")));
 
-			if skip.is_some() {
-				continue;
-			}
-
 			if let Some(ident) = field.ident.as_ref() {
 				let rust_token = ident.to_string();
 				let fso_name;
 
-				if unnamed.is_none() {
+				if skip.is_some() {
+					fso_name = FSONaming::Skipped;
+				}
+				else if unnamed.is_none() {
 					let actual_name = forced_table_name.unwrap_or(Ok("$".to_string() + &rust_token[..1].to_string().to_uppercase() + &rust_token[1..] + ":"))?;
 					if existence_is_bool.is_none() {
 						fso_name = FSONaming::Named { fso_name: actual_name };
