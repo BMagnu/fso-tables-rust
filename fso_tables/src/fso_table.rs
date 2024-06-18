@@ -6,7 +6,7 @@ use std::fs::File;
 use std::io::Read;
 use std::iter::Peekable;
 use std::path::Path;
-use std::str::{Chars, FromStr};
+use std::str::Chars;
 use regex::Regex;
 
 #[derive(Debug)]
@@ -211,68 +211,4 @@ impl FSOParser<'_> for FSOTableFileParser {
 pub trait FSOTable<'parser, Parser: FSOParser<'parser>> {
 	fn parse(state: &'parser Parser) -> Result<Self, FSOParsingError> where Self: Sized;
 	fn dump(&self);
-}
-
-impl<'a, Parser: FSOParser<'a>> FSOTable<'a, Parser> for String {
-	fn parse(state: &Parser) -> Result<Self, FSOParsingError> {
-		state.consume_whitespace_inline(&['"']);
-		let result = state.read_until_last_whitespace_of_line_or_stop(&['"']);
-		Ok(result.to_string())
-	}
-
-	fn dump(&self) { }
-}
-
-impl<'a, Parser: FSOParser<'a>> FSOTable<'a, Parser> for bool {
-	fn parse(state: &Parser) -> Result<Self, FSOParsingError> {
-		state.consume_whitespace_inline(&[]);
-		let result = state.read_until_whitespace();
-		match result.clone().to_lowercase().as_str() {
-			"yes" | "true" | "on" => {
-				Ok(true)
-			}
-			"no" | "false" | "off" => {
-				Ok(false)
-			}
-			_ => {
-				Err(FSOParsingError { reason: format!("Expected boolean value, got {}.", result), line: state.line() })
-			}
-		}
-	}
-
-	fn dump(&self) { }
-}
-
-impl<'a, Parser: FSOParser<'a>> FSOTable<'a, Parser> for f32 {
-	fn parse(state: &Parser) -> Result<Self, FSOParsingError> {
-		state.consume_whitespace_inline(&[]);
-		let current = state.get();
-		let mut have_dot = false;
-		let mut to_consume = 0usize;
-		
-		for c in current.chars() {
-			if c.is_ascii_digit() || ((c == '+' || c == '-') && to_consume == 0) {
-				to_consume += 1;
-			}
-			else if c == '.' && !have_dot {
-				to_consume += 1;
-				have_dot = true;
-			}
-			else {
-				break;
-			}
-		}
-		
-		if to_consume == 0 {
-			return Err(FSOParsingError { reason: format!("Expected float, got {}!", &current[..min(4, current.len())]), line: state.line() } );
-		}
-		
-		state.consume(to_consume);
-		match <f32 as FromStr>::from_str(&current[..to_consume]) {
-			Ok(f) => { Ok(f) },
-			Err(err) => { Err(FSOParsingError { reason: format!("Expected float, got {}, parse error {}!", &current[..to_consume], err.to_string()), line: state.line() } ) }
-		}
-	}
-
-	fn dump(&self) { }
 }
