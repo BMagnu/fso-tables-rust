@@ -92,11 +92,9 @@ pub(crate) fn deduce_type(ty: &Type) -> Result<(FSOValueType, TokenStream), Erro
 				};
 			}
 			Ok((FSOValueType::Tuple { inner: types }, quote!{ (|| {
-				state.consume_whitespace_inline(&[]);
-				state.consume_string("(")?;
+				state.consume_whitespace_inline(&['(']);
 				let __tuple_result = Ok((#parser));
-				state.consume_whitespace_inline(&[]);
-				state.consume_string(")")?;
+				state.consume_whitespace_inline(&[')']);
 				__tuple_result
 			})() }))
 		}

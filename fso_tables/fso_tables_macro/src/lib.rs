@@ -27,6 +27,7 @@ pub fn fso_table(args: proc_macro::TokenStream, input: proc_macro::TokenStream) 
 	let mut table_suffix :Option<String> = None;
 
 	let mut flagset_naming = false;
+	let mut inline = false;
 	
 	struct ReqTraitParser {
 		data: Punctuated<PathSegment, PathSep>
@@ -79,6 +80,10 @@ pub fn fso_table(args: proc_macro::TokenStream, input: proc_macro::TokenStream) 
 			flagset_naming = true;
 			Ok(())
 		}
+		else if meta.path.is_ident("inline") {
+			inline = true;
+			Ok(())
+		}
 		else {
 			Err(meta.error("Unsupported FSO table property"))
 		}
@@ -87,7 +92,7 @@ pub fn fso_table(args: proc_macro::TokenStream, input: proc_macro::TokenStream) 
 
 	let result = match &mut item {
 		Item::Struct(item_struct) => {
-			fso_table_struct(item_struct, required_parser_traits, required_lifetimes, table_prefix, table_suffix, prefix, suffix)
+			fso_table_struct(item_struct, required_parser_traits, required_lifetimes, table_prefix, table_suffix, prefix, suffix, inline)
 		}
 		Item::Enum(item_enum) => {
 			fso_table_enum(item_enum, required_parser_traits, required_lifetimes, prefix.unwrap_or("".to_string()), suffix.unwrap_or("".to_string()), flagset_naming)

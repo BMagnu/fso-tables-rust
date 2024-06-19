@@ -21,10 +21,15 @@ pub(crate) struct TableField {
 	rust_span: Span
 }
 
-pub(crate) fn fso_struct_build_parse(fields: &Vec<TableField>) -> Result<(TokenStream, TokenStream), Error> {
-	let mut parse = quote! {
-		let mut __already_parsed_comments = false;
-		let (mut __comments, mut __version_string) = (None, None);
+pub(crate) fn fso_struct_build_parse(fields: &Vec<TableField>, inline: bool) -> Result<(TokenStream, TokenStream), Error> {
+	let mut parse = if inline {
+		quote!()
+	} 
+	else {
+		quote! {
+			let mut __already_parsed_comments = false;
+			let (mut __comments, mut __version_string) = (None, None);
+		}
 	};
 	let mut fill = TokenStream::new();
 
@@ -40,11 +45,23 @@ pub(crate) fn fso_struct_build_parse(fields: &Vec<TableField>) -> Result<(TokenS
 			continue;
 		}
 
-		let parse_comments = quote!{
-			if !__already_parsed_comments {
-				(__comments, __version_string) = state.consume_whitespace(false);
-			}	
-		};
+		let parse_comments;
+		let process_comments;
+		if inline {
+			parse_comments = quote!{};
+			process_comments = quote!{};
+		}
+		else {
+			parse_comments = quote!{
+				if !__already_parsed_comments {
+					(__comments, __version_string) = state.consume_whitespace(false);
+				}	
+			};
+			process_comments = quote!{
+				__already_parsed_comments = false;
+				//TODO process __comments, __version_string
+			};
+		}
 
 		let parse_gobble = if let Some(gobble) = &field.fso_gobble {
 			quote! {
@@ -63,21 +80,20 @@ pub(crate) fn fso_struct_build_parse(fields: &Vec<TableField>) -> Result<(TokenS
 					FSOValueType::Option { .. } => {
 						quote!{
 							let #name = if let Ok(_) = state.consume_string(#fso_name) {
-								__already_parsed_comments = false;
-								//TODO process __comments, __version_string
+								#process_comments
 								let __opt_result = Some(#make_type?); //Named Optionals must be parseable
 								#parse_gobble
 								__opt_result
 							}
 							else {
-								None()
-							}
+								None
+							};
 						}
 					}
 					_ => {
 						quote!{
-							__already_parsed_comments = false;
 							state.consume_string(#fso_name)?;
+							#process_comments
 							let #name = #make_type?;
 							#parse_gobble
 						}
@@ -89,19 +105,18 @@ pub(crate) fn fso_struct_build_parse(fields: &Vec<TableField>) -> Result<(TokenS
 					FSOValueType::Option { .. } => {
 						quote!{
 							let #name = if let Ok(data) = #make_type { //Unnamed Optionals can fail during parsing itself, that's assumed to be "non-existant"
-								__already_parsed_comments = false;
-								//TODO process __comments, __version_string
+								#process_comments
 								#parse_gobble
 								Some(data)
 							}
 							else {
 								None
-							}
+							};
 						}
 					}
 					_ => {
 						quote!{
-							__already_parsed_comments = false;
+							#process_comments
 							let #name = #make_type?;
 							#parse_gobble
 						}
@@ -112,7 +127,7 @@ pub(crate) fn fso_struct_build_parse(fields: &Vec<TableField>) -> Result<(TokenS
 				match value_type {
 					FSOValueType::Direct { ty: Type::Path( path ) } if path.path.is_ident("bool") => {
 						quote!{
-							__already_parsed_comments = false;
+							#process_comments
 							let #name = state.consume_string(#fso_name).is_ok();
 							if #name {
 								#parse_gobble
@@ -142,7 +157,7 @@ pub(crate) fn fso_struct_build_parse(fields: &Vec<TableField>) -> Result<(TokenS
 	Ok((parse, fill))
 }
 
-pub(crate) fn fso_table_struct(item_struct: &mut ItemStruct, instancing_req: Vec<TokenStream>, lifetime_req: Vec<TokenStream>, table_prefix: Option<String>, table_suffix: Option<String>, prefix: Option<String>, suffix: Option<String>) -> Result<TokenStream, Error> {
+pub(crate) fn fso_table_struct(item_struct: &mut ItemStruct, instancing_req: Vec<TokenStream>, lifetime_req: Vec<TokenStream>, table_prefix: Option<String>, table_suffix: Option<String>, prefix: Option<String>, suffix: Option<String>, inline: bool) -> Result<TokenStream, Error> {
 	let mut table_fields: Vec<TableField> = Vec::new();
 	let struct_name = &item_struct.ident;
 	let (_, ty_generics, where_clause) = item_struct.generics.split_for_impl();
@@ -213,9 +228,10 @@ pub(crate) fn fso_table_struct(item_struct: &mut ItemStruct, instancing_req: Vec
 							out_name = format!("{}{}{}{}", out_name, if number == 0 { "" } else { " " }, name_part.as_str()[..1].to_uppercase(), &name_part.as_str()[1..]);
 						}
 					});
-
+					
+					let default_suffix = if existence_is_bool.is_none() { ":" } else { "" }.to_string();
 					let actual_name = forced_table_name.unwrap_or(
-						Ok(format!("{}{}{}", prefix.clone().unwrap_or("$".to_string()), out_name, suffix.clone().unwrap_or(":".to_string())))
+						Ok(format!("{}{}{}", prefix.clone().unwrap_or("$".to_string()), out_name, suffix.clone().unwrap_or(default_suffix)))
 					)?;
 					if existence_is_bool.is_none() {
 						fso_name = FSONaming::Named { fso_name: actual_name };
@@ -244,7 +260,7 @@ pub(crate) fn fso_table_struct(item_struct: &mut ItemStruct, instancing_req: Vec
 
 	let where_clause_with_parser = fso_build_where_clause(&instancing_req, &where_clause);
 
-	let (parser, filler) = fso_struct_build_parse(&table_fields)?;
+	let (parser, filler) = fso_struct_build_parse(&table_fields, inline)?;
 
 	let prefix_parser = if let Some(prefix) = table_prefix{
 		quote! {

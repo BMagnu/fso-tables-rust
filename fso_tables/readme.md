@@ -45,7 +45,7 @@ Most basic types have fairly intuitive behavior. Some more complex types can alt
 - ``Rc<T>``, ``Arc<T>``, ``Cell<T>``, ``RefCell<T>``: Same as ``Box<T>``
 - ``Vec<T>``: A vector will repeatedly parse the subtype ``T`` until this fails. It does _not_ require the name of the vector in the containing struct to be repeated. If such behavior is desired, create a vector of a ``#[fso_table]``-annotated struct that itself contains the desired name-value pair. The list can be optionally surrounded by parentheses. Individual elements can be seperated by spaces or commas. When the individual elements are ``#[fso_table]``-annotated structs, they can also be seperated by newlines. 
 - ``Option<T>``: Denotes an optional key in the table. If the name is present, the value will be parsed. If it is not, parsing will be skipped for this value.
-- ``(T...)``: Tuples will parse a list of inner keys that must be surrounded by parentheses in the table. These values can be seperated by spaces and commas.
+- ``(T...)``: Tuples will parse a list of inner keys that can be surrounded by parentheses in the table. These values can be seperated by spaces and commas.
 
 If a type beyond the specified types is required to be parsed, it must manually implement the ``FSOTable`` trait.
 
@@ -62,6 +62,7 @@ For annotated structs only:
 - ``table_end="<value>"``: Requires a token ``<value>`` when parsing of this struct ends.
 - ``prefix="<value>"``: What is appended before the name of a field when parsing. Defaults to ``$``. Can be combined with the following to, for example, result in ``$<VariantName>:`` keys.
 - ``suffix="<value>"``: What is appended before the name of a field when parsing. Defaults to ``:``.
+- ``inline``: Using this annotation forces all keys to be within one line. This also means that such a struct cannot process version strings or comments.
 
 For annotated enums only:
 - ``prefix="<value>"``: What is appended before the name of an enum variant when parsing. Can be combined with the following to, for example, result in ``$<VariantName>:`` keys.
