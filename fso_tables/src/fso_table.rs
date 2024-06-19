@@ -158,7 +158,6 @@ struct FSOParserState {
 }
 
 pub struct FSOTableFileParser {
-
 	original: String,
 	state: RefCell<FSOParserState>
 }
