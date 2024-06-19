@@ -1,7 +1,7 @@
 use fso_tables::{fso_table, FSOParser, FSOParsingError, FSOTable};
 use crate::{Angles, Vec3D};
 
-#[fso_table]
+#[fso_table(toplevel)]
 pub struct AnimationTable {
 	#[unnamed]
 	pub animations: AnimationSubtable,

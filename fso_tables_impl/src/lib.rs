@@ -5,7 +5,6 @@ use fso_tables::fso_table;
 
 //Reexport the properties that you need to use this crate. Only force people to include the original fso_tables crate if they want to manually add tables or types or anything.
 pub use fso_tables::FSOTableFileParser;
-pub use fso_tables::FSOTable;
 pub use fso_tables::FSOParsingError;
 
 #[fso_table(inline)]

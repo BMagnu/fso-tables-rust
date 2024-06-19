@@ -1,11 +1,10 @@
 use fso_tables::fso_table;
 
-#[fso_table(table_start="#Curves", table_end="#End")]
+#[fso_table(table_start="#Curves", table_end="#End", toplevel)]
 pub struct CurveTable {
 	#[unnamed]
 	pub curves: Vec<Curve>
 }
-
 
 #[fso_table]
 pub struct Curve {

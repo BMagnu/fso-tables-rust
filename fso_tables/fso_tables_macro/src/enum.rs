@@ -42,7 +42,7 @@ pub(crate) fn fso_enum_build_parse(fields: &Fields, default_enum_case_store_in: 
 	Ok(field_parsers)
 }
 
-pub fn fso_table_enum(item_enum: &mut ItemEnum, instancing_req: Vec<TokenStream>, lifetime_req: Vec<TokenStream>, prefix: String, suffix: String, flagset_naming: bool) -> Result<TokenStream, Error> {
+pub fn fso_table_enum(item_enum: &mut ItemEnum, instancing_req: Vec<TokenStream>, lifetime_req: Vec<TokenStream>, prefix: String, suffix: String, flagset_naming: bool) -> Result<(TokenStream, TokenStream), Error> {
 	let struct_name = &item_enum.ident;
 	let (_, ty_generics, where_clause) = item_enum.generics.split_for_impl();
 
@@ -152,7 +152,7 @@ pub fn fso_table_enum(item_enum: &mut ItemEnum, instancing_req: Vec<TokenStream>
 
 	let where_clause_with_parser = fso_build_where_clause(&instancing_req, &where_clause);
 
-	Ok(quote! {
+	Ok((quote! {
 		impl <#impl_with_generics> fso_tables::FSOTable<'parser, Parser> for #struct_name #ty_generics #where_clause_with_parser {
 			fn parse(state: &'parser Parser) -> Result<#struct_name #ty_generics, fso_tables::FSOParsingError> {
 				#parser
@@ -160,5 +160,10 @@ pub fn fso_table_enum(item_enum: &mut ItemEnum, instancing_req: Vec<TokenStream>
 			}
 			fn dump(&self) { }
 		}
-	})
+	},
+	quote! { 
+		impl #struct_name #ty_generics {
+			pub fn parse<#impl_with_generics>(parser: &'parser Parser) -> Result<Self, fso_tables::FSOParsingError> #where_clause_with_parser { fso_tables::FSOTable::parse(parser) }
+		}
+	}))
 }

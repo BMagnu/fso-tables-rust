@@ -28,6 +28,7 @@ pub fn fso_table(args: proc_macro::TokenStream, input: proc_macro::TokenStream) 
 
 	let mut flagset_naming = false;
 	let mut inline = false;
+	let mut toplevel = false;
 	
 	struct ReqTraitParser {
 		data: Punctuated<PathSegment, PathSep>
@@ -84,6 +85,10 @@ pub fn fso_table(args: proc_macro::TokenStream, input: proc_macro::TokenStream) 
 			inline = true;
 			Ok(())
 		}
+		else if meta.path.is_ident("toplevel") {
+			toplevel = true;
+			Ok(())
+		}
 		else {
 			Err(meta.error("Unsupported FSO table property"))
 		}
@@ -102,13 +107,15 @@ pub fn fso_table(args: proc_macro::TokenStream, input: proc_macro::TokenStream) 
 		}
 	};
 	
-	let post_item_out = match result {
+	let (post_item_out, top_level_impl) = match result {
 		Ok(stream) => { stream }
-		Err(error) => { error.to_compile_error() }
+		Err(error) => { (error.to_compile_error(), quote!()) }
 	};
-
+	let top_level_impl = if toplevel { top_level_impl } else { quote!() };
+	
 	return quote! {
         #item
         #post_item_out
+		#top_level_impl
     }.into();
 }

@@ -157,7 +157,7 @@ pub(crate) fn fso_struct_build_parse(fields: &Vec<TableField>, inline: bool) -> 
 	Ok((parse, fill))
 }
 
-pub(crate) fn fso_table_struct(item_struct: &mut ItemStruct, instancing_req: Vec<TokenStream>, lifetime_req: Vec<TokenStream>, table_prefix: Option<String>, table_suffix: Option<String>, prefix: Option<String>, suffix: Option<String>, inline: bool) -> Result<TokenStream, Error> {
+pub(crate) fn fso_table_struct(item_struct: &mut ItemStruct, instancing_req: Vec<TokenStream>, lifetime_req: Vec<TokenStream>, table_prefix: Option<String>, table_suffix: Option<String>, prefix: Option<String>, suffix: Option<String>, inline: bool) -> Result<(TokenStream, TokenStream), Error> {
 	let mut table_fields: Vec<TableField> = Vec::new();
 	let struct_name = &item_struct.ident;
 	let (_, ty_generics, where_clause) = item_struct.generics.split_for_impl();
@@ -281,7 +281,7 @@ pub(crate) fn fso_table_struct(item_struct: &mut ItemStruct, instancing_req: Vec
 		quote!{}
 	};
 
-	Ok(quote! {
+	Ok((quote! {
 		impl <#impl_with_generics> fso_tables::FSOTable<'parser, Parser> for #struct_name #ty_generics #where_clause_with_parser {
 			fn parse(state: &'parser Parser) -> Result<#struct_name #ty_generics, fso_tables::FSOParsingError> {
 				#prefix_parser
@@ -293,5 +293,10 @@ pub(crate) fn fso_table_struct(item_struct: &mut ItemStruct, instancing_req: Vec
 			}
 			fn dump(&self) { }
 		}
-	})
+	}, 
+	quote! { 
+		impl #struct_name #ty_generics {
+			pub fn parse<#impl_with_generics>(parser: &'parser Parser) -> Result<Self, fso_tables::FSOParsingError> #where_clause_with_parser { fso_tables::FSOTable::parse(parser) }
+		}
+	}))
 }

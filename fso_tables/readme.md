@@ -56,6 +56,7 @@ Available annotations are:
 
 - ``required_parser_trait(trait...)``: Force the struct to require a parser struct that implements the specified types in ``trait...`` (specified as a comma seperated list). This is useful if you require a custom type to be parsed in the struct that itself requires more data (such as about states unrelated to this table) then is provided by the ``FSOParser`` trait.
 - ``required_lifetime(lifetimes...)``: Useful in combination with the above, can be used to define (bounded) lifetimes, as you might require if you need to prove that the parsed table outlives the parser struct.
+- ``toplevel``: Explicitly re-exposes the ``parse`` method to crates that have not explicitly included ``fso_tables::FSOTable``, allowing parsing of these tables without needing to explicitly depend on ``fso_tables``.
 
 For annotated structs only:
 - ``table_start="<value>"``: Requires a token ``<value>`` when parsing of this struct begins.
