@@ -296,7 +296,9 @@ pub(crate) fn fso_table_struct(item_struct: &mut ItemStruct, instancing_req: Vec
 	}, 
 	quote! { 
 		impl #struct_name #ty_generics {
-			pub fn parse<#impl_with_generics>(parser: &'parser Parser) -> Result<Self, fso_tables::FSOParsingError> #where_clause_with_parser { fso_tables::FSOTable::parse(parser) }
+			pub fn parse<Parser>(parser: Parser) -> Result<Self, fso_tables::FSOParsingError> where Parser: for<'parser> fso_tables::FSOParser<'parser> { 
+				fso_tables::FSOTable::parse(&parser)
+			}
 		}
 	}))
 }
