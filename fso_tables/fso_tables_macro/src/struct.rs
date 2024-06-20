@@ -1,5 +1,5 @@
 use proc_macro2::{Ident, Span, TokenStream};
-use quote::quote;
+use quote::{format_ident, quote};
 use regex::Regex;
 use syn::{Error, Expr, ExprLit, ItemStruct, Lit, Meta, MetaNameValue, Type};
 use syn::spanned::Spanned;
@@ -21,7 +21,7 @@ pub(crate) struct TableField {
 	rust_span: Span
 }
 
-pub(crate) fn fso_struct_build_parse(fields: &Vec<TableField>, inline: bool) -> Result<(TokenStream, TokenStream), Error> {
+pub(crate) fn fso_struct_build_parse(fields: &Vec<TableField>, inline: bool) -> Result<(TokenStream, TokenStream, TokenStream), Error> {
 	let mut parse = if inline {
 		quote!()
 	} 
@@ -32,6 +32,7 @@ pub(crate) fn fso_struct_build_parse(fields: &Vec<TableField>, inline: bool) -> 
 		}
 	};
 	let mut fill = TokenStream::new();
+	let mut spew = TokenStream::new();
 
 	for (_field_num, field) in fields.iter().enumerate() {
 		let name = &field.rust_token;
@@ -72,13 +73,22 @@ pub(crate) fn fso_struct_build_parse(fields: &Vec<TableField>, inline: bool) -> 
 		else {
 			quote!()
 		};
+		let spew_gobble = if let Some(gobble) = &field.fso_gobble {
+			quote! {
+				state.append(#gobble);
+				state.append(" ");
+			}
+		}
+		else {
+			quote!(state.append(" ");)
+		};
 
-		let (value_type, make_type) = deduce_type(&field.rust_type)?;
-		let parse_value = match &field.fso_name {
+		let (value_type, make_type, spew_type) = deduce_type(&field.rust_type, &format_ident!("__to_spew"))?;
+		let (parse_value, spew_value) = match &field.fso_name {
 			FSONaming::Named { fso_name } => {
 				match value_type {
 					FSOValueType::Option { .. } => {
-						quote!{
+						(quote!{
 							let #name = if let Ok(_) = state.consume_string(#fso_name) {
 								#process_comments
 								let __opt_result = Some(#make_type?); //Named Optionals must be parseable
@@ -88,22 +98,39 @@ pub(crate) fn fso_struct_build_parse(fields: &Vec<TableField>, inline: bool) -> 
 							else {
 								None
 							};
-						}
+						},
+						quote!{
+							if let Some(__to_spew) = &self.#name {
+								state.append("\n");
+								state.append(#fso_name);
+								#spew_type
+								#spew_gobble
+							}
+						})
 					}
 					_ => {
-						quote!{
+						(quote!{
 							state.consume_string(#fso_name)?;
 							#process_comments
 							let #name = #make_type?;
 							#parse_gobble
-						}
+						},
+						quote!{
+							{
+								let __to_spew = &self.#name;
+								state.append("\n");
+								state.append(#fso_name);
+								#spew_type
+								#spew_gobble
+							}
+						})
 					}
 				}
 			}
 			FSONaming::Unnamed => {
 				match value_type {
 					FSOValueType::Option { .. } => {
-						quote!{
+						(quote!{
 							let #name = if let Ok(data) = #make_type { //Unnamed Optionals can fail during parsing itself, that's assumed to be "non-existant"
 								#process_comments
 								#parse_gobble
@@ -112,27 +139,47 @@ pub(crate) fn fso_struct_build_parse(fields: &Vec<TableField>, inline: bool) -> 
 							else {
 								None
 							};
-						}
+						},
+						quote!{
+							if let Some(__to_spew) = &self.#name {
+								#spew_type
+								#spew_gobble
+							}
+						})
 					}
 					_ => {
-						quote!{
+						(quote!{
 							#process_comments
 							let #name = #make_type?;
 							#parse_gobble
-						}
+						},
+						quote!{
+							{
+								let __to_spew = &self.#name;
+								#spew_type
+								#spew_gobble
+							}
+						})
 					}
 				}
 			}
 			FSONaming::ExistenceIsBool { fso_name } => {
 				match value_type {
 					FSOValueType::Direct { ty: Type::Path( path ) } if path.path.is_ident("bool") => {
-						quote!{
+						(quote!{
 							#process_comments
 							let #name = state.consume_string(#fso_name).is_ok();
 							if #name {
 								#parse_gobble
 							}
-						}
+						},
+						quote! {
+							if self.#name {
+								state.append("\n");
+								state.append(#fso_name);
+								#spew_gobble
+							}
+						})
 					}
 					_ => {
 						return Err(Error::new(field.rust_span, "Only variables of type bool can be existence-bool'd!"));
@@ -152,9 +199,14 @@ pub(crate) fn fso_struct_build_parse(fields: &Vec<TableField>, inline: bool) -> 
 			#fill
 			#name,
 		);
+
+		spew = quote!(
+			#spew
+			#spew_value
+		);
 	}
 
-	Ok((parse, fill))
+	Ok((parse, fill, spew))
 }
 
 pub(crate) fn fso_table_struct(item_struct: &mut ItemStruct, instancing_req: Vec<TokenStream>, lifetime_req: Vec<TokenStream>, table_prefix: Option<String>, table_suffix: Option<String>, prefix: Option<String>, suffix: Option<String>, inline: bool) -> Result<(TokenStream, TokenStream), Error> {
@@ -260,7 +312,7 @@ pub(crate) fn fso_table_struct(item_struct: &mut ItemStruct, instancing_req: Vec
 
 	let where_clause_with_parser = fso_build_where_clause(&instancing_req, &where_clause);
 
-	let (parser, filler) = fso_struct_build_parse(&table_fields, inline)?;
+	let (parser, filler, spew) = fso_struct_build_parse(&table_fields, inline)?;
 
 	let prefix_parser = if let Some(prefix) = table_prefix{
 		quote! {
@@ -291,13 +343,20 @@ pub(crate) fn fso_table_struct(item_struct: &mut ItemStruct, instancing_req: Vec
 					#filler
 				})
 			}
-			fn dump(&self) { }
+			fn spew(&self, state: &mut impl fso_tables::FSOBuilder) {
+				#spew
+			}
 		}
 	}, 
 	quote! { 
 		impl #struct_name #ty_generics {
 			pub fn parse<Parser>(parser: Parser) -> Result<Self, fso_tables::FSOParsingError> where Parser: for<'parser> fso_tables::FSOParser<'parser> { 
 				fso_tables::FSOTable::parse(&parser)
+			}
+			pub fn spew<Parser>(&self) -> String where Parser: for<'parser> fso_tables::FSOParser<'parser> {
+				let mut parser = fso_tables::FSOTableBuilder::default();
+				fso_tables::FSOTable::<Parser>::spew(self, &mut parser);
+				fso_tables::FSOBuilder::spew(parser)
 			}
 		}
 	}))

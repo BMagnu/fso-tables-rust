@@ -1,13 +1,15 @@
 use proc_macro2::TokenStream;
-use quote::quote;
+use quote::{format_ident, quote};
 use regex::Regex;
 use syn::{Error, Expr, ExprLit, Fields, ItemEnum, Lit, Meta, MetaNameValue};
 use syn::spanned::Spanned;
 use crate::typehandler::{deduce_type, FSOValueType};
 use crate::util::{fso_build_impl_generics, fso_build_where_clause};
 
-pub(crate) fn fso_enum_build_parse(fields: &Fields, default_enum_case_store_in: bool) -> Result<TokenStream, Error> {
+pub(crate) fn fso_enum_build_parse(fields: &Fields, default_enum_case_store_in: bool) -> Result<(TokenStream, TokenStream), Error> {
 	let mut field_parsers = quote!();
+	let mut field_spewers = quote!();
+
 	for field in fields{
 		if let Some(ident) = &field.ident {
 			if default_enum_case_store_in {
@@ -15,20 +17,37 @@ pub(crate) fn fso_enum_build_parse(fields: &Fields, default_enum_case_store_in: 
 					#field_parsers
 					#ident: state.read_until_whitespace(),
 				};
+				field_spewers = quote! {
+					#field_spewers
+					state.append(#ident.as_str())
+				};
 			}
 			else {
-				let (value_type, field_parser) = deduce_type(&field.ty)?;
+				let (value_type, field_parser, field_spewer) = deduce_type(&field.ty, &format_ident!("__field"))?;
 				match value_type {
-					FSOValueType::Option { .. }=> {
+					FSOValueType::Option { .. } => {
 						field_parsers = quote! {
 							#field_parsers
 							#ident: if let Ok(data) = #field_parser { Some(data) } else { None },
+						};
+						field_spewers = quote! {
+							#field_spewers
+							if let Some(__field) = #ident {
+								#field_spewer
+							}
 						};
 					}
 					_ => {
 						field_parsers = quote! {
 							#field_parsers
 							#ident: #field_parser?,
+						};
+						field_spewers = quote! {
+							#field_spewers
+							{
+								let __field = #ident;
+								#field_spewer
+							}
 						};
 					}
 				}
@@ -39,7 +58,7 @@ pub(crate) fn fso_enum_build_parse(fields: &Fields, default_enum_case_store_in: 
 		}
 	}
 	
-	Ok(field_parsers)
+	Ok((field_parsers, field_spewers))
 }
 
 pub fn fso_table_enum(item_enum: &mut ItemEnum, instancing_req: Vec<TokenStream>, lifetime_req: Vec<TokenStream>, prefix: String, suffix: String, flagset_naming: bool) -> Result<(TokenStream, TokenStream), Error> {
@@ -47,6 +66,7 @@ pub fn fso_table_enum(item_enum: &mut ItemEnum, instancing_req: Vec<TokenStream>
 	let (_, ty_generics, where_clause) = item_enum.generics.split_for_impl();
 
 	let mut parser = quote!(let (_, _) = state.consume_whitespace(false););
+	let mut spewer = quote!();
 	let mut fail_message = "Expected one of ".to_string();
 	let mut option_nr = 0;
 
@@ -109,7 +129,7 @@ pub fn fso_table_enum(item_enum: &mut ItemEnum, instancing_req: Vec<TokenStream>
 		fail_message = format!("{}{}, ", fail_message, fso_name);
 
 		let default_enum_case_store_in = default_enum_case_store_in.unwrap_or(Ok(false))?;
-		let field_parsers = fso_enum_build_parse(&option.fields, default_enum_case_store_in)?;
+		let (field_parsers, field_spewers) = fso_enum_build_parse(&option.fields, default_enum_case_store_in)?;
 
 		let rust_name = &option.ident;
 
@@ -129,6 +149,33 @@ pub fn fso_table_enum(item_enum: &mut ItemEnum, instancing_req: Vec<TokenStream>
 					return Ok( #struct_name::#rust_name {
 						#field_parsers
 					});
+				}
+			};
+		}
+
+		let field_names = option.fields.iter().fold(quote!(), |input, next| {
+			if let Some(next_name) = &next.ident {
+				quote!(#input #next_name,)
+			}
+			else {
+				input
+			}
+		});
+
+		if default_enum_case_store_in {
+			spewer = quote! {
+				#spewer
+				__enum @ #struct_name::#rust_name { #field_names } => {
+					#field_spewers
+				}
+			};
+		}
+		else {
+			spewer = quote! {
+				#spewer
+				__enum @ #struct_name::#rust_name { #field_names } => {
+					state.append(#fso_name);
+					#field_spewers
 				}
 			};
 		}
@@ -158,7 +205,11 @@ pub fn fso_table_enum(item_enum: &mut ItemEnum, instancing_req: Vec<TokenStream>
 				#parser
 				#fail_return
 			}
-			fn dump(&self) { }
+			fn spew(&self, state: &mut impl fso_tables::FSOBuilder) {
+				match self {
+					#spewer
+				}
+			}
 		}
 	},
 	quote! { 

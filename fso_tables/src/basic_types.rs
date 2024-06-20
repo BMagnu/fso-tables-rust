@@ -1,6 +1,6 @@
 use std::cmp::min;
 use std::str::FromStr;
-use crate::{FSOParser, FSOParsingError, FSOTable};
+use crate::{FSOBuilder, FSOBuilderState, FSOParser, FSOParsingError, FSOTable};
 
 impl<'a, Parser: FSOParser<'a>> FSOTable<'a, Parser> for String {
 	fn parse(state: &Parser) -> Result<Self, FSOParsingError> {
@@ -9,7 +9,18 @@ impl<'a, Parser: FSOParser<'a>> FSOTable<'a, Parser> for String {
 		Ok(result.to_string())
 	}
 
-	fn dump(&self) { }
+	fn spew(&self, state: &mut impl FSOBuilder) {
+		let state_stack = state.get_state();
+		match state_stack.last() {
+			Some( FSOBuilderState::InlineList ) => {
+				state.append(format!("\"{}\"", self).as_str());
+			}
+			_ => {
+				state.append( self.as_str());
+			}
+		}
+	}
+
 }
 
 impl<'a, Parser: FSOParser<'a>> FSOTable<'a, Parser> for bool {
@@ -29,7 +40,9 @@ impl<'a, Parser: FSOParser<'a>> FSOTable<'a, Parser> for bool {
 		}
 	}
 
-	fn dump(&self) { }
+	fn spew(&self, state: &mut impl FSOBuilder) {
+		state.append(if *self { "YES" } else { "NO" });
+	}
 }
 
 fn parse_number<'a, Parser: FSOParser<'a>, T: FromStr>(state: &Parser, allow_dot: bool, allow_minus: bool) -> Result<T, FSOParsingError> {
@@ -67,7 +80,9 @@ impl<'a, Parser: FSOParser<'a>> FSOTable<'a, Parser> for f32 {
 		parse_number(state, true, true)
 	}
 
-	fn dump(&self) { }
+	fn spew(&self, state: &mut impl FSOBuilder) {
+		state.append(self.to_string().as_str());
+	}
 }
 
 impl<'a, Parser: FSOParser<'a>> FSOTable<'a, Parser> for f64 {
@@ -75,7 +90,9 @@ impl<'a, Parser: FSOParser<'a>> FSOTable<'a, Parser> for f64 {
 		parse_number(state, true, true)
 	}
 
-	fn dump(&self) { }
+	fn spew(&self, state: &mut impl FSOBuilder) {
+		state.append(self.to_string().as_str());
+	}
 }
 
 impl<'a, Parser: FSOParser<'a>> FSOTable<'a, Parser> for i32 {
@@ -83,7 +100,9 @@ impl<'a, Parser: FSOParser<'a>> FSOTable<'a, Parser> for i32 {
 		parse_number(state, false, true)
 	}
 
-	fn dump(&self) { }
+	fn spew(&self, state: &mut impl FSOBuilder) {
+		state.append(self.to_string().as_str());
+	}
 }
 
 impl<'a, Parser: FSOParser<'a>> FSOTable<'a, Parser> for i64 {
@@ -91,7 +110,9 @@ impl<'a, Parser: FSOParser<'a>> FSOTable<'a, Parser> for i64 {
 		parse_number(state, false, true)
 	}
 
-	fn dump(&self) { }
+	fn spew(&self, state: &mut impl FSOBuilder) {
+		state.append(self.to_string().as_str());
+	}
 }
 
 impl<'a, Parser: FSOParser<'a>> FSOTable<'a, Parser> for u32 {
@@ -99,7 +120,9 @@ impl<'a, Parser: FSOParser<'a>> FSOTable<'a, Parser> for u32 {
 		parse_number(state, false, false)
 	}
 
-	fn dump(&self) { }
+	fn spew(&self, state: &mut impl FSOBuilder) {
+		state.append(self.to_string().as_str());
+	}
 }
 
 impl<'a, Parser: FSOParser<'a>> FSOTable<'a, Parser> for u64 {
@@ -107,5 +130,7 @@ impl<'a, Parser: FSOParser<'a>> FSOTable<'a, Parser> for u64 {
 		parse_number(state, false, false)
 	}
 
-	fn dump(&self) { }
+	fn spew(&self, state: &mut impl FSOBuilder) {
+		state.append(self.to_string().as_str());
+	}
 }

@@ -151,6 +151,19 @@ pub trait FSOParser<'a> {
 	}
 }
 
+pub enum FSOBuilderState {
+	Default,
+	InlineList,
+}
+
+pub trait FSOBuilder {
+	fn append(&mut self, content: &str);
+
+	fn spew(self) -> String;
+
+	fn get_state(&mut self) -> &mut Vec<FSOBuilderState>;
+}
+
 #[derive(Default)]
 struct FSOParserState {
 	pos: usize,
@@ -207,7 +220,27 @@ impl FSOParser<'_> for FSOTableFileParser {
 	}
 }
 
+#[derive(Default)]
+pub struct FSOTableBuilder {
+	buffer: String,
+	state: Vec<FSOBuilderState>
+}
+
+impl FSOBuilder for FSOTableBuilder {
+	fn append(&mut self, content: &str) {
+		self.buffer.push_str(content);
+	}
+
+	fn spew(self) -> String {
+		self.buffer
+	}
+
+	fn get_state(&mut self) -> &mut Vec<FSOBuilderState> {
+		&mut self.state
+	}
+}
+
 pub trait FSOTable<'parser, Parser: FSOParser<'parser>> {
 	fn parse(state: &'parser Parser) -> Result<Self, FSOParsingError> where Self: Sized;
-	fn dump(&self);
+	fn spew(&self, state: &mut impl FSOBuilder);
 }
