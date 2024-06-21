@@ -26,7 +26,7 @@ pub fn fso_build_where_clause(instancing_req: &Vec<TokenStream>, where_clause: &
 	};
 
 	for instancing_type in instancing_req.iter() {
-		where_clause_with_parser = quote! {#where_clause_with_parser Parser: #instancing_type, };
+		where_clause_with_parser = quote! {#where_clause_with_parser Parser: #instancing_type };
 	}
 
 	where_clause_with_parser

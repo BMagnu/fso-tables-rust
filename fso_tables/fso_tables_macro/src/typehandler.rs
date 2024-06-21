@@ -117,8 +117,8 @@ pub(crate) fn deduce_type<'a>(name: &FSONaming, ty: &'a Type, to_spew_name: &Ide
 							Ok((FSOValueType::Container { inner, container }, make_value, spew_value))
 						}
 						_ => {
-							let make_value = quote! (<#ty as fso_tables::FSOTable<Parser>>::parse(state));
-							let spew_value = quote! (<#ty as fso_tables::FSOTable<Parser>>::spew(#to_spew_name, state););
+							let make_value = quote! (<#ty as fso_tables::FSOTable>::parse(state));
+							let spew_value = quote! (<#ty as fso_tables::FSOTable>::spew(#to_spew_name, state););
 							Ok((FSOValueType::Generic { ty }, make_value, spew_value))
 						}
 					}
@@ -127,8 +127,8 @@ pub(crate) fn deduce_type<'a>(name: &FSONaming, ty: &'a Type, to_spew_name: &Ide
 					Err(Error::new(ty.span(), format!("FSO Tables encountered type {} with non-type generic argument!", typename.ident)))
 				}
 			} else {
-				let make_value = quote! (<#ty as fso_tables::FSOTable<Parser>>::parse(state));
-				let spew_value = quote! (<#ty as fso_tables::FSOTable<Parser>>::spew(#to_spew_name, state););
+				let make_value = quote! (<#ty as fso_tables::FSOTable>::parse(state));
+				let spew_value = quote! (<#ty as fso_tables::FSOTable>::spew(#to_spew_name, state););
 				Ok((FSOValueType::Direct { ty }, make_value, spew_value))
 			}
 		}

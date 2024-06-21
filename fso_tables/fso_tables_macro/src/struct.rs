@@ -317,28 +317,34 @@ pub(crate) fn fso_table_struct(item_struct: &mut ItemStruct, instancing_req: Vec
 
 	let (parser, filler, spew) = fso_struct_build_parse(&table_fields, inline)?;
 
-	let prefix_parser = if let Some(prefix) = table_prefix{
-		quote! {
+	let (prefix_parser, prefix_spewer) = if let Some(prefix) = table_prefix{
+		(quote! {
 			let (_, _) = state.consume_whitespace(false);
 			state.consume_string(#prefix)?;
-		}
+		}, quote! {
+			state.append(#prefix);
+			state.append("\n\n");
+		})
 	}
 	else {
-		quote!{}
+		(quote!{}, quote!{})
 	};
-	let suffix_parser = if let Some(suffix) = table_suffix{
-		quote! {
+	let (suffix_parser, suffix_spewer) = if let Some(suffix) = table_suffix{
+		(quote! {
 			let (_, _) = state.consume_whitespace(false);
 			state.consume_string(#suffix)?;
-		}
+		}, quote! {
+			state.append("\n\n");
+			state.append(#suffix);
+		})
 	}
 	else {
-		quote!{}
+		(quote!{}, quote!{})
 	};
 
 	Ok((quote! {
-		impl <#impl_with_generics> fso_tables::FSOTable<'parser, Parser> for #struct_name #ty_generics #where_clause_with_parser {
-			fn parse(state: &'parser Parser) -> Result<#struct_name #ty_generics, fso_tables::FSOParsingError> {
+		impl fso_tables::FSOTable for #struct_name #ty_generics  {
+			fn parse<#impl_with_generics>(state: &'parser Parser) -> Result<#struct_name #ty_generics, fso_tables::FSOParsingError> #where_clause_with_parser {
 				#prefix_parser
 				#parser
 				#suffix_parser
@@ -347,18 +353,20 @@ pub(crate) fn fso_table_struct(item_struct: &mut ItemStruct, instancing_req: Vec
 				})
 			}
 			fn spew(&self, state: &mut impl fso_tables::FSOBuilder) {
+				#prefix_spewer
 				#spew
+				#suffix_spewer
 			}
 		}
 	}, 
 	quote! { 
 		impl #struct_name #ty_generics {
-			pub fn parse<Parser>(parser: Parser) -> Result<Self, fso_tables::FSOParsingError> where Parser: for<'parser> fso_tables::FSOParser<'parser> { 
+			pub fn parse<Parser>(parser: Parser) -> Result<Self, fso_tables::FSOParsingError> where Parser: for<'a> fso_tables::FSOParser<'a> { 
 				fso_tables::FSOTable::parse(&parser)
 			}
-			pub fn spew<Parser>(&self) -> String where Parser: for<'parser> fso_tables::FSOParser<'parser> {
+			pub fn spew(&self) -> String {
 				let mut parser = fso_tables::FSOTableBuilder::default();
-				fso_tables::FSOTable::<Parser>::spew(self, &mut parser);
+				fso_tables::FSOTable::spew(self, &mut parser);
 				fso_tables::FSOBuilder::spew(parser)
 			}
 		}

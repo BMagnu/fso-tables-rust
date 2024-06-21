@@ -2,8 +2,8 @@ use std::cmp::min;
 use std::str::FromStr;
 use crate::{FSOBuilder, FSOBuilderListState, FSOParser, FSOParsingError, FSOTable};
 
-impl<'a, Parser: FSOParser<'a>> FSOTable<'a, Parser> for String {
-	fn parse(state: &Parser) -> Result<Self, FSOParsingError> {
+impl FSOTable for String {
+	fn parse<'a, Parser: FSOParser<'a>>(state: &Parser) -> Result<Self, FSOParsingError> {
 		state.consume_whitespace_inline(&['"']);
 		let result = state.read_until_last_whitespace_of_line_or_stop(&['"']);
 		Ok(result.to_string())
@@ -22,8 +22,8 @@ impl<'a, Parser: FSOParser<'a>> FSOTable<'a, Parser> for String {
 
 }
 
-impl<'a, Parser: FSOParser<'a>> FSOTable<'a, Parser> for bool {
-	fn parse(state: &Parser) -> Result<Self, FSOParsingError> {
+impl FSOTable for bool {
+	fn parse<'a, Parser: FSOParser<'a>>(state: &Parser) -> Result<Self, FSOParsingError> {
 		state.consume_whitespace_inline(&[]);
 		let result = state.read_until_whitespace();
 		match result.clone().to_lowercase().as_str() {
@@ -74,8 +74,8 @@ fn parse_number<'a, Parser: FSOParser<'a>, T: FromStr>(state: &Parser, allow_dot
 	}
 }
 
-impl<'a, Parser: FSOParser<'a>> FSOTable<'a, Parser> for f32 {
-	fn parse(state: &Parser) -> Result<Self, FSOParsingError> {
+impl FSOTable for f32 {
+	fn parse<'a, Parser: FSOParser<'a>>(state: &Parser) -> Result<Self, FSOParsingError> {
 		parse_number(state, true, true)
 	}
 
@@ -84,8 +84,8 @@ impl<'a, Parser: FSOParser<'a>> FSOTable<'a, Parser> for f32 {
 	}
 }
 
-impl<'a, Parser: FSOParser<'a>> FSOTable<'a, Parser> for f64 {
-	fn parse(state: &Parser) -> Result<Self, FSOParsingError> {
+impl FSOTable for f64 {
+	fn parse<'a, Parser: FSOParser<'a>>(state: &Parser) -> Result<Self, FSOParsingError> {
 		parse_number(state, true, true)
 	}
 
@@ -94,8 +94,8 @@ impl<'a, Parser: FSOParser<'a>> FSOTable<'a, Parser> for f64 {
 	}
 }
 
-impl<'a, Parser: FSOParser<'a>> FSOTable<'a, Parser> for i32 {
-	fn parse(state: &Parser) -> Result<Self, FSOParsingError> {
+impl FSOTable for i32 {
+	fn parse<'a, Parser: FSOParser<'a>>(state: &Parser) -> Result<Self, FSOParsingError> {
 		parse_number(state, false, true)
 	}
 
@@ -104,8 +104,8 @@ impl<'a, Parser: FSOParser<'a>> FSOTable<'a, Parser> for i32 {
 	}
 }
 
-impl<'a, Parser: FSOParser<'a>> FSOTable<'a, Parser> for i64 {
-	fn parse(state: &Parser) -> Result<Self, FSOParsingError> {
+impl FSOTable for i64 {
+	fn parse<'a, Parser: FSOParser<'a>>(state: &Parser) -> Result<Self, FSOParsingError> {
 		parse_number(state, false, true)
 	}
 
@@ -114,8 +114,8 @@ impl<'a, Parser: FSOParser<'a>> FSOTable<'a, Parser> for i64 {
 	}
 }
 
-impl<'a, Parser: FSOParser<'a>> FSOTable<'a, Parser> for u32 {
-	fn parse(state: &Parser) -> Result<Self, FSOParsingError> {
+impl FSOTable for u32 {
+	fn parse<'a, Parser: FSOParser<'a>>(state: &Parser) -> Result<Self, FSOParsingError> {
 		parse_number(state, false, false)
 	}
 
@@ -124,8 +124,8 @@ impl<'a, Parser: FSOParser<'a>> FSOTable<'a, Parser> for u32 {
 	}
 }
 
-impl<'a, Parser: FSOParser<'a>> FSOTable<'a, Parser> for u64 {
-	fn parse(state: &Parser) -> Result<Self, FSOParsingError> {
+impl FSOTable for u64 {
+	fn parse<'a, Parser: FSOParser<'a>>(state: &Parser) -> Result<Self, FSOParsingError> {
 		parse_number(state, false, false)
 	}
 

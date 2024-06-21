@@ -246,7 +246,7 @@ impl FSOBuilder for FSOTableBuilder {
 	}
 }
 
-pub trait FSOTable<'parser, Parser: FSOParser<'parser>> {
-	fn parse(state: &'parser Parser) -> Result<Self, FSOParsingError> where Self: Sized;
+pub trait FSOTable {
+	fn parse<'parser, Parser: FSOParser<'parser>>(state: &'parser Parser) -> Result<Self, FSOParsingError> where Self: Sized;
 	fn spew(&self, state: &mut impl FSOBuilder);
 }

@@ -214,8 +214,8 @@ pub fn fso_table_enum(item_enum: &mut ItemEnum, instancing_req: Vec<TokenStream>
 	let where_clause_with_parser = fso_build_where_clause(&instancing_req, &where_clause);
 
 	Ok((quote! {
-		impl <#impl_with_generics> fso_tables::FSOTable<'parser, Parser> for #struct_name #ty_generics #where_clause_with_parser {
-			fn parse(state: &'parser Parser) -> Result<#struct_name #ty_generics, fso_tables::FSOParsingError> {
+		impl fso_tables::FSOTable for #struct_name #ty_generics {
+			fn parse<#impl_with_generics>(state: &'parser Parser) -> Result<#struct_name #ty_generics, fso_tables::FSOParsingError> #where_clause_with_parser{
 				#parser
 				#fail_return
 			}
@@ -228,8 +228,13 @@ pub fn fso_table_enum(item_enum: &mut ItemEnum, instancing_req: Vec<TokenStream>
 	},
 	quote! { 
 		impl #struct_name #ty_generics {
-			pub fn parse<Parser>(parser: Parser) -> Result<Self, fso_tables::FSOParsingError> where Parser: for<'parser> fso_tables::FSOParser<'parser> { 
+			pub fn parse<Parser>(parser: Parser) -> Result<Self, fso_tables::FSOParsingError> where Parser: for<'a> fso_tables::FSOParser<'a> { 
 				fso_tables::FSOTable::parse(&parser)
+			}
+			pub fn spew(&self) -> String {
+				let mut parser = fso_tables::FSOTableBuilder::default();
+				fso_tables::FSOTable::spew(self, &mut parser);
+				fso_tables::FSOBuilder::spew(parser)
 			}
 		}
 	}))

@@ -32,8 +32,8 @@ pub struct Animation {
 }
 
 pub struct Moveable;
-impl<'a, Parser: FSOParser<'a>> FSOTable<'a, Parser> for Moveable {
-	fn parse(state: &'a Parser) -> Result<Self, FSOParsingError> { Err(FSOParsingError{ line: state.line(), reason: "Unimplemented!".to_string() })}
+impl FSOTable for Moveable {
+	fn parse<'a, Parser: FSOParser<'a>>(state: &'a Parser) -> Result<Self, FSOParsingError> { Err(FSOParsingError{ line: state.line(), reason: "Unimplemented!".to_string() })}
 	fn spew(&self, _state: &mut impl FSOBuilder) { }
 }
 
