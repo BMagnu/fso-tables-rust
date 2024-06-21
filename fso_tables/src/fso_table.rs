@@ -151,9 +151,15 @@ pub trait FSOParser<'a> {
 	}
 }
 
-pub enum FSOBuilderState {
-	Default,
-	InlineList,
+#[derive(PartialEq)]
+pub enum FSOBuilderListState {
+	MutlilineList,
+	InlineList
+}
+
+#[derive(Default)]
+pub struct FSOBuilderState {
+	pub list_state: Vec<FSOBuilderListState>
 }
 
 pub trait FSOBuilder {
@@ -161,7 +167,7 @@ pub trait FSOBuilder {
 
 	fn spew(self) -> String;
 
-	fn get_state(&mut self) -> &mut Vec<FSOBuilderState>;
+	fn get_state(&mut self) -> &mut FSOBuilderState;
 }
 
 #[derive(Default)]
@@ -192,7 +198,7 @@ impl FSOTableFileParser {
 			original: s,
 			state: RefCell::new(FSOParserState::default())
 		};
-		
+
 		Ok(parser)
 	}
 }
@@ -223,7 +229,7 @@ impl FSOParser<'_> for FSOTableFileParser {
 #[derive(Default)]
 pub struct FSOTableBuilder {
 	buffer: String,
-	state: Vec<FSOBuilderState>
+	state: FSOBuilderState
 }
 
 impl FSOBuilder for FSOTableBuilder {
@@ -235,7 +241,7 @@ impl FSOBuilder for FSOTableBuilder {
 		self.buffer
 	}
 
-	fn get_state(&mut self) -> &mut Vec<FSOBuilderState> {
+	fn get_state(&mut self) -> &mut FSOBuilderState {
 		&mut self.state
 	}
 }

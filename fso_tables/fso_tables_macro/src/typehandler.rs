@@ -1,8 +1,17 @@
+use std::cmp::PartialEq;
 use proc_macro2::{Ident, TokenStream};
 use quote::{format_ident, quote};
 use syn::{GenericArgument, Path, Type, TypePath, Error, TypeTuple, Index};
 use syn::PathArguments::AngleBracketed;
 use syn::spanned::Spanned;
+
+#[derive(PartialEq)]
+pub(crate) enum FSONaming {
+	Named { fso_name: String, multiline: bool },
+	Unnamed,
+	ExistenceIsBool { fso_name: String },
+	Skipped
+}
 
 #[allow(dead_code)]
 pub(crate) enum FSOValueType<'a> {
@@ -14,7 +23,7 @@ pub(crate) enum FSOValueType<'a> {
 	Tuple {inner: Vec<FSOValueType<'a>>}
 }
 
-pub(crate) fn deduce_type<'a>(ty: &'a Type, to_spew_name: &Ident) -> Result<(FSOValueType<'a>, TokenStream, TokenStream), Error>{
+pub(crate) fn deduce_type<'a>(name: &FSONaming, ty: &'a Type, to_spew_name: &Ident) -> Result<(FSOValueType<'a>, TokenStream, TokenStream), Error>{
 	match ty {
 		Type::Path( TypePath { path: Path { segments, .. }, ..} ) => {
 			assert!(!segments.is_empty());
@@ -23,7 +32,9 @@ pub(crate) fn deduce_type<'a>(ty: &'a Type, to_spew_name: &Ident) -> Result<(FSO
 				if let GenericArgument::Type( inner ) = inner_types.args.first().unwrap() {
 					match typename.ident.to_string().as_str() {
 						"Vec" => {
-							let (inner_type, make_containing, spew_containing) = deduce_type(inner, &format_ident!("__to_spew"))?;
+							let multiline = if let FSONaming::Named { multiline, ..} = name { *multiline } else if *name == FSONaming::Unnamed { true } else { false };
+							
+							let (inner_type, make_containing, spew_containing) = deduce_type(name, inner, &format_ident!("__to_spew"))?;
 							if let FSOValueType::Option { .. } = inner_type {
 								return Err(Error::new(inner.span(), "FSO Tables cannot contain a Vector of Options. Consider adding a subtable with optional unnamed elements."));
 							}
@@ -40,18 +51,45 @@ pub(crate) fn deduce_type<'a>(ty: &'a Type, to_spew_name: &Ident) -> Result<(FSO
 								}
 							};
 
+							let push = if multiline {
+								quote! {
+									state.get_state().list_state.push(fso_tables::FSOBuilderListState::MutlilineList);
+								}
+							}
+							else {
+								quote! {
+									state.append("(");
+									state.get_state().list_state.push(fso_tables::FSOBuilderListState::InlineList);
+								}
+							};
+							let pop = if multiline {
+								quote! {
+									state.get_state().list_state.pop();
+								}
+							}
+							else {
+								quote! {
+									state.get_state().list_state.pop();
+									state.append(")");
+								}
+							};
+							let newline = if multiline { quote!(state.append("\n");) } else { quote!() };
+							
 							let spew_value = quote!{
 								{
+									#push
 									for __to_spew in #to_spew_name.iter() {
+										#newline
 										#spew_containing
 									}
+									#pop
 								}
 							};
 							
 							Ok((FSOValueType::Vector { inner }, make_value, spew_value))
 						}
 						"Option" => {
-							let (inner_type, make_containing, spew_containing) = deduce_type(inner, to_spew_name)?;
+							let (inner_type, make_containing, spew_containing) = deduce_type(name, inner, to_spew_name)?;
 							if let FSOValueType::Option { .. } | FSOValueType::Container { .. } = inner_type {
 								return Err(Error::new(inner.span(), "FSO Tables cannot contain an Option of Options or Box-likes. Consider reversing the template order."));
 							}
@@ -62,7 +100,7 @@ pub(crate) fn deduce_type<'a>(ty: &'a Type, to_spew_name: &Ident) -> Result<(FSO
 							Ok((FSOValueType::Option { inner }, make_value, spew_value))
 						}
 						"Box" | "Rc" | "Arc" | "Cell" | "RefCell" => {
-							let (inner_type, make_containing, spew_containing) = deduce_type(inner, &format_ident!("__box_contained"))?;
+							let (inner_type, make_containing, spew_containing) = deduce_type(name, inner, &format_ident!("__box_contained"))?;
 							if let FSOValueType::Option { .. } = inner_type {
 								return Err(Error::new(inner.span(), "FSO Tables cannot contain a Box-like of Options. Consider reversing the template order."));
 							}
@@ -101,7 +139,7 @@ pub(crate) fn deduce_type<'a>(ty: &'a Type, to_spew_name: &Ident) -> Result<(FSO
 			let mut count = 0;
 
 			for inner in elems {
-				let (inner_type, make_containing, spew_containing) = deduce_type(inner, &format_ident!("__current_enum"))?;
+				let (inner_type, make_containing, spew_containing) = deduce_type(name, inner, &format_ident!("__current_enum"))?;
 				if let FSOValueType::Option { .. } = inner_type {
 					return Err(Error::new(inner.span(), "FSO Tables cannot yet contain Options."));
 				}

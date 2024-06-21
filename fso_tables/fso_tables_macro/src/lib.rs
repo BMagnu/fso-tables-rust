@@ -25,6 +25,8 @@ pub fn fso_table(args: proc_macro::TokenStream, input: proc_macro::TokenStream) 
 
 	let mut table_prefix :Option<String> = None;
 	let mut table_suffix :Option<String> = None;
+	
+	let mut field_spacing :Option<String> = None;
 
 	let mut flagset_naming = false;
 	let mut inline = false;
@@ -89,6 +91,10 @@ pub fn fso_table(args: proc_macro::TokenStream, input: proc_macro::TokenStream) 
 			toplevel = true;
 			Ok(())
 		}
+		else if meta.path.is_ident("enum_field_spacing") {
+			field_spacing = Some(meta.value()?.parse::<LitStr>()?.value());
+			Ok(())
+		}
 		else {
 			Err(meta.error("Unsupported FSO table property"))
 		}
@@ -100,7 +106,7 @@ pub fn fso_table(args: proc_macro::TokenStream, input: proc_macro::TokenStream) 
 			fso_table_struct(item_struct, required_parser_traits, required_lifetimes, table_prefix, table_suffix, prefix, suffix, inline)
 		}
 		Item::Enum(item_enum) => {
-			fso_table_enum(item_enum, required_parser_traits, required_lifetimes, prefix.unwrap_or("".to_string()), suffix.unwrap_or("".to_string()), flagset_naming)
+			fso_table_enum(item_enum, required_parser_traits, required_lifetimes, prefix.unwrap_or("".to_string()), suffix.unwrap_or("".to_string()), flagset_naming, field_spacing.unwrap_or(" ".to_string()))
 		}
 		_ => {
 			Err(Error::new(item.span(), "Can only annotate structs and enums!"))

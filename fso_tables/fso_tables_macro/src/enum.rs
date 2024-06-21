@@ -3,14 +3,17 @@ use quote::{format_ident, quote};
 use regex::Regex;
 use syn::{Error, Expr, ExprLit, Fields, ItemEnum, Lit, Meta, MetaNameValue};
 use syn::spanned::Spanned;
-use crate::typehandler::{deduce_type, FSOValueType};
+use crate::typehandler::{deduce_type, FSONaming, FSOValueType};
 use crate::util::{fso_build_impl_generics, fso_build_where_clause};
 
-pub(crate) fn fso_enum_build_parse(fields: &Fields, default_enum_case_store_in: bool) -> Result<(TokenStream, TokenStream), Error> {
+pub(crate) fn fso_enum_build_parse(fields: &Fields, default_enum_case_store_in: bool, field_spacing: &String) -> Result<(TokenStream, TokenStream), Error> {
 	let mut field_parsers = quote!();
 	let mut field_spewers = quote!();
 
+	let mut field_number = 0u32;
+	
 	for field in fields{
+		let append_space = if field_number == 0 { quote!(state.append(#field_spacing);) } else { quote!(state.append(", ");) };
 		if let Some(ident) = &field.ident {
 			if default_enum_case_store_in {
 				field_parsers = quote! {
@@ -19,11 +22,11 @@ pub(crate) fn fso_enum_build_parse(fields: &Fields, default_enum_case_store_in: 
 				};
 				field_spewers = quote! {
 					#field_spewers
-					state.append(#ident.as_str())
+					state.append(#ident.as_str());
 				};
 			}
 			else {
-				let (value_type, field_parser, field_spewer) = deduce_type(&field.ty, &format_ident!("__field"))?;
+				let (value_type, field_parser, field_spewer) = deduce_type(&FSONaming::Unnamed, &field.ty, &format_ident!("__field"))?;
 				match value_type {
 					FSOValueType::Option { .. } => {
 						field_parsers = quote! {
@@ -33,6 +36,7 @@ pub(crate) fn fso_enum_build_parse(fields: &Fields, default_enum_case_store_in: 
 						field_spewers = quote! {
 							#field_spewers
 							if let Some(__field) = #ident {
+								#append_space
 								#field_spewer
 							}
 						};
@@ -46,6 +50,7 @@ pub(crate) fn fso_enum_build_parse(fields: &Fields, default_enum_case_store_in: 
 							#field_spewers
 							{
 								let __field = #ident;
+								#append_space
 								#field_spewer
 							}
 						};
@@ -56,12 +61,13 @@ pub(crate) fn fso_enum_build_parse(fields: &Fields, default_enum_case_store_in: 
 		else {
 			return Err(Error::new(field.span(), "FSO table enums cannot have unnamed fields."));
 		}
+		field_number += 1;
 	}
 	
 	Ok((field_parsers, field_spewers))
 }
 
-pub fn fso_table_enum(item_enum: &mut ItemEnum, instancing_req: Vec<TokenStream>, lifetime_req: Vec<TokenStream>, prefix: String, suffix: String, flagset_naming: bool) -> Result<(TokenStream, TokenStream), Error> {
+pub fn fso_table_enum(item_enum: &mut ItemEnum, instancing_req: Vec<TokenStream>, lifetime_req: Vec<TokenStream>, prefix: String, suffix: String, flagset_naming: bool, field_spacing: String) -> Result<(TokenStream, TokenStream), Error> {
 	let struct_name = &item_enum.ident;
 	let (_, ty_generics, where_clause) = item_enum.generics.split_for_impl();
 
@@ -129,7 +135,7 @@ pub fn fso_table_enum(item_enum: &mut ItemEnum, instancing_req: Vec<TokenStream>
 		fail_message = format!("{}{}, ", fail_message, fso_name);
 
 		let default_enum_case_store_in = default_enum_case_store_in.unwrap_or(Ok(false))?;
-		let (field_parsers, field_spewers) = fso_enum_build_parse(&option.fields, default_enum_case_store_in)?;
+		let (field_parsers, field_spewers) = fso_enum_build_parse(&option.fields, default_enum_case_store_in, &field_spacing)?;
 
 		let rust_name = &option.ident;
 
@@ -161,21 +167,29 @@ pub fn fso_table_enum(item_enum: &mut ItemEnum, instancing_req: Vec<TokenStream>
 				input
 			}
 		});
+		
+		let prespew = if flagset_naming { quote!(state.append("\"");) } else { quote!() };
 
 		if default_enum_case_store_in {
 			spewer = quote! {
 				#spewer
-				__enum @ #struct_name::#rust_name { #field_names } => {
+				#struct_name::#rust_name { #field_names } => {
+					#prespew
 					#field_spewers
+					#prespew
+					state.append(" ");
 				}
 			};
 		}
 		else {
 			spewer = quote! {
 				#spewer
-				__enum @ #struct_name::#rust_name { #field_names } => {
+				#struct_name::#rust_name { #field_names } => {
+					#prespew
 					state.append(#fso_name);
 					#field_spewers
+					#prespew
+					state.append(" ");
 				}
 			};
 		}

@@ -3,15 +3,8 @@ use quote::{format_ident, quote};
 use regex::Regex;
 use syn::{Error, Expr, ExprLit, ItemStruct, Lit, Meta, MetaNameValue, Type};
 use syn::spanned::Spanned;
-use crate::typehandler::{deduce_type, FSOValueType};
+use crate::typehandler::{deduce_type, FSONaming, FSOValueType};
 use crate::util::{fso_build_impl_generics, fso_build_where_clause};
-
-enum FSONaming {
-	Named { fso_name: String },
-	Unnamed,
-	ExistenceIsBool { fso_name: String },
-	Skipped
-}
 
 pub(crate) struct TableField {
 	fso_name: FSONaming,
@@ -83,9 +76,9 @@ pub(crate) fn fso_struct_build_parse(fields: &Vec<TableField>, inline: bool) -> 
 			quote!(state.append(" ");)
 		};
 
-		let (value_type, make_type, spew_type) = deduce_type(&field.rust_type, &format_ident!("__to_spew"))?;
+		let (value_type, make_type, spew_type) = deduce_type(&field.fso_name, &field.rust_type, &format_ident!("__to_spew"))?;
 		let (parse_value, spew_value) = match &field.fso_name {
-			FSONaming::Named { fso_name } => {
+			FSONaming::Named { fso_name, .. } => {
 				match value_type {
 					FSOValueType::Option { .. } => {
 						(quote!{
@@ -257,12 +250,20 @@ pub(crate) fn fso_table_struct(item_struct: &mut ItemStruct, instancing_req: Vec
 				}
 				_ => { None }
 			});
+			let multiline = field.attrs.iter().find_map(|a| match &a.meta {
+				Meta::Path( path ) if path.is_ident("multiline") => {
+					Some(())
+				}
+				_ => { None }
+			});
+			
 			field.attrs.retain(|a| !(
 				a.path().is_ident("fso_name") ||
 				a.path().is_ident("gobble") ||
 				a.path().is_ident("skip") ||
 				a.path().is_ident("unnamed") ||
-				a.path().is_ident("existence")));
+				a.path().is_ident("existence") || 
+				a.path().is_ident("multiline")));
 
 			if let Some(ident) = field.ident.as_ref() {
 				let rust_token = ident.to_string();
@@ -286,7 +287,7 @@ pub(crate) fn fso_table_struct(item_struct: &mut ItemStruct, instancing_req: Vec
 						Ok(format!("{}{}{}", prefix.clone().unwrap_or("$".to_string()), out_name, suffix.clone().unwrap_or(default_suffix)))
 					)?;
 					if existence_is_bool.is_none() {
-						fso_name = FSONaming::Named { fso_name: actual_name };
+						fso_name = FSONaming::Named { fso_name: actual_name, multiline: multiline.is_some() };
 					}
 					else {
 						fso_name = FSONaming::ExistenceIsBool { fso_name: actual_name };

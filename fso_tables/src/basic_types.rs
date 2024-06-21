@@ -1,6 +1,6 @@
 use std::cmp::min;
 use std::str::FromStr;
-use crate::{FSOBuilder, FSOBuilderState, FSOParser, FSOParsingError, FSOTable};
+use crate::{FSOBuilder, FSOBuilderListState, FSOParser, FSOParsingError, FSOTable};
 
 impl<'a, Parser: FSOParser<'a>> FSOTable<'a, Parser> for String {
 	fn parse(state: &Parser) -> Result<Self, FSOParsingError> {
@@ -10,9 +10,8 @@ impl<'a, Parser: FSOParser<'a>> FSOTable<'a, Parser> for String {
 	}
 
 	fn spew(&self, state: &mut impl FSOBuilder) {
-		let state_stack = state.get_state();
-		match state_stack.last() {
-			Some( FSOBuilderState::InlineList ) => {
+		match state.get_state().list_state.last() {
+			Some( FSOBuilderListState::InlineList ) => {
 				state.append(format!("\"{}\"", self).as_str());
 			}
 			_ => {

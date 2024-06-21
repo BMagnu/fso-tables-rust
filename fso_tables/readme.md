@@ -68,7 +68,7 @@ For annotated structs only:
 For annotated enums only:
 - ``prefix="<value>"``: What is appended before the name of an enum variant when parsing. Can be combined with the following to, for example, result in ``$<VariantName>:`` keys.
 - ``suffix="<value>"``: What is appended before the name of an enum variant when parsing.
-- ``flagset``: Converts all CamelCase enum variant names to spaced lower case as needed to parse flagsets.
+- ``flagset``: Converts all CamelCase enum variant names to spaced lower case as needed to parse flagsets. Will also ensure that when spewing, the values will be enclosed in quotes.
 
 ## Field Modifiers:
 
@@ -80,7 +80,8 @@ For fields of structs:
 - ``unnamed``: Parses an unnamed value. Such a value is expected to not be preceded by a name, and to follow directly after the last parsed value (except whitespaces).
 - ``gobble="<value>"``: Expects that after completely parsing the value, ``<value>`` is present in the table. This occurrence of ``<value>`` will be consumed before parsing the next value.
 - ``existence``: Interprets the presence of a key with the given name at this point in the table as a value of ``true``. Can only be used for fields with the type ``bool``.
+- ``multiline``: When spewing, a vector will print each value in a new line if it is unnamed. If it is named, all keys will be inline and enclosed in parentheses unless this key is set.
 
-For variants of types:
+For variants of enums:
 - ``use_as_default_string``: Marks the last variant of the enum as the default case. If no prior variant matched, the current token will be stored as a ``String`` in the last enum variant instead of erroring.
 - ``fso_name="<value>"``: As above. Is applied before ``prefix`` and ``suffix``.

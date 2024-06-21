@@ -10,6 +10,7 @@ pub struct CurveTable {
 pub struct Curve {
 	pub name: String,
 	#[fso_name="$KeyFrames:"]
+	#[multiline]
 	pub keyframes: Vec<CurveKeyframe>
 }
 
@@ -22,7 +23,7 @@ pub struct CurveKeyframe {
 	pub segment: CurveSegment
 }
 
-#[fso_table]
+#[fso_table(enum_field_spacing=", ")]
 pub enum CurveSegment{
 	Constant,
 	Linear,
