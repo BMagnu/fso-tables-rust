@@ -96,6 +96,7 @@ pub(crate) fn fso_struct_build_parse(fields: &Vec<TableField>, inline: bool) -> 
 							if let Some(__to_spew) = &self.#name {
 								state.append("\n");
 								state.append(#fso_name);
+								state.append(" ");
 								#spew_type
 								#spew_gobble
 							}
@@ -113,6 +114,7 @@ pub(crate) fn fso_struct_build_parse(fields: &Vec<TableField>, inline: bool) -> 
 								let __to_spew = &self.#name;
 								state.append("\n");
 								state.append(#fso_name);
+								state.append(" ");
 								#spew_type
 								#spew_gobble
 							}
