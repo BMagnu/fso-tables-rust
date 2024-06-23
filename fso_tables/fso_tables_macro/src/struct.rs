@@ -39,6 +39,7 @@ pub(crate) fn fso_struct_build_parse(fields: &Vec<TableField>, inline: bool) -> 
 			continue;
 		}
 
+		let field_num = field.field_number;
 		let parse_comments;
 		let process_comments;
 		if inline {
@@ -46,7 +47,6 @@ pub(crate) fn fso_struct_build_parse(fields: &Vec<TableField>, inline: bool) -> 
 			process_comments = quote!{};
 		}
 		else {
-			let field_num = field.field_number;
 			parse_comments = quote!{
 				if !__already_parsed_comments {
 					(__comment, __version_string) = state.consume_whitespace(false);
@@ -78,6 +78,16 @@ pub(crate) fn fso_struct_build_parse(fields: &Vec<TableField>, inline: bool) -> 
 		else {
 			quote!(state.append(" ");)
 		};
+		
+		let spew_comments = quote!{
+			if let Some(comment) = &self.__comments[#field_num] {
+				state.append(comment);
+				state.append("\n");
+			}
+			if let Some(version_string) = &self.__version_strings[#field_num] {
+				state.append(version_string);
+			}
+		};
 
 		let parse_inner_gobble = quote!{
 			if let Some(__inner_gobble) = __inner_gobble {
@@ -107,6 +117,7 @@ pub(crate) fn fso_struct_build_parse(fields: &Vec<TableField>, inline: bool) -> 
 						quote!{
 							if let Some(__to_spew) = &self.#name {
 								state.append("\n");
+								#spew_comments
 								state.append(#fso_name);
 								state.append(" ");
 								#spew_type
@@ -126,6 +137,7 @@ pub(crate) fn fso_struct_build_parse(fields: &Vec<TableField>, inline: bool) -> 
 							{
 								let __to_spew = &self.#name;
 								state.append("\n");
+								#spew_comments
 								state.append(#fso_name);
 								state.append(" ");
 								#spew_type
@@ -151,6 +163,7 @@ pub(crate) fn fso_struct_build_parse(fields: &Vec<TableField>, inline: bool) -> 
 						},
 						quote!{
 							if let Some(__to_spew) = &self.#name {
+								#spew_comments
 								#spew_type
 								#spew_gobble
 							}
@@ -166,6 +179,7 @@ pub(crate) fn fso_struct_build_parse(fields: &Vec<TableField>, inline: bool) -> 
 						quote!{
 							{
 								let __to_spew = &self.#name;
+								#spew_comments
 								#spew_type
 								#spew_gobble
 							}
@@ -186,6 +200,7 @@ pub(crate) fn fso_struct_build_parse(fields: &Vec<TableField>, inline: bool) -> 
 						quote! {
 							if self.#name {
 								state.append("\n");
+								#spew_comments
 								state.append(#fso_name);
 								#spew_gobble
 							}
@@ -354,8 +369,15 @@ pub(crate) fn fso_table_struct(item_struct: &mut ItemStruct, instancing_req: Vec
 				err
 			})?;
 		}, quote! {
+			if let Some(comment) = &self.__comments[0] {
+				state.append(comment);
+				state.append("\n");
+			}
+			if let Some(version_string) = &self.__version_strings[0] {
+				state.append(version_string);
+			}
 			state.append(#prefix);
-			state.append("\n\n");
+			state.append("\n");
 		})
 	}
 	else {
@@ -373,6 +395,13 @@ pub(crate) fn fso_table_struct(item_struct: &mut ItemStruct, instancing_req: Vec
 			state.consume_string(#suffix)?;
 		}, quote! {
 			state.append("\n\n");
+			if let Some(comment) = &self.__comments[#suffix_field] {
+				state.append(comment);
+				state.append("\n");
+			}
+			if let Some(version_string) = &self.__version_strings[#suffix_field] {
+				state.append(version_string);
+			}
 			state.append(#suffix);
 		})
 	}
