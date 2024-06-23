@@ -24,9 +24,9 @@ pub static BUILTIN_CURVES: Lazy<Vec<Curve>> = Lazy::new(|| {
 
 				let ease_in = Some(ease != EASE::EaseOut);
 
-				keyframes.push(CurveKeyframe {
-					pos: (0f32, if reverse { 1f32 } else { 0f32 }),
-					segment: match interptype {
+				keyframes.push(CurveKeyframe::new(
+					(0f32, if reverse { 1f32 } else { 0f32 }),
+					match interptype {
 						TYPE::Circ => {
 							CurveSegment::Circular { ease_in }
 						}
@@ -34,12 +34,12 @@ pub static BUILTIN_CURVES: Lazy<Vec<Curve>> = Lazy::new(|| {
 							CurveSegment::Polynomial { ease_in, degree: (interptype as i32) as f32 }
 						}
 					}
-				});
+				));
 
 				if ease == EASE::EaseInOut {
-					keyframes.push(CurveKeyframe {
-						pos: (0.5f32, 0.5f32),
-						segment: match interptype {
+					keyframes.push(CurveKeyframe::new(
+						(0.5f32, 0.5f32),
+						match interptype {
 							TYPE::Circ => {
 								CurveSegment::Circular { ease_in: Some(!ease_in.unwrap()) }
 							}
@@ -47,15 +47,15 @@ pub static BUILTIN_CURVES: Lazy<Vec<Curve>> = Lazy::new(|| {
 								CurveSegment::Polynomial { ease_in: Some(!ease_in.unwrap()), degree: (interptype as i32) as f32 }
 							}
 						}
-					});
+					));
 				}
 
-				keyframes.push(CurveKeyframe {
-					pos: (1f32, if reverse { 0f32 } else { 1f32 }),
-					segment: CurveSegment::Constant {}
-				});
+				keyframes.push(CurveKeyframe::new(
+					(1f32, if reverse { 0f32 } else { 1f32 }),
+					CurveSegment::Constant {}
+				));
 
-				builtins.push(Curve { name, keyframes })
+				builtins.push(Curve::new(name, keyframes));
 			}
 		}
 	}

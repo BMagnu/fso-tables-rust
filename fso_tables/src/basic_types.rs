@@ -1,12 +1,12 @@
 use std::cmp::min;
 use std::str::FromStr;
-use crate::{FSOBuilder, FSOBuilderListState, FSOParser, FSOParsingError, FSOTable};
+use crate::{FSOBuilder, FSOBuilderListState, FSOParser, FSOParsingError, FSOParsingHangingGobble, FSOTable};
 
 impl FSOTable for String {
-	fn parse<'a, Parser: FSOParser<'a>>(state: &Parser) -> Result<Self, FSOParsingError> {
+	fn parse<'a, Parser: FSOParser<'a>>(state: &Parser, _hanging_gobble: Option<FSOParsingHangingGobble>) -> Result<(Self, Option<FSOParsingHangingGobble>), FSOParsingError> {
 		state.consume_whitespace_inline(&['"']);
 		let result = state.read_until_last_whitespace_of_line_or_stop(&['"']);
-		Ok(result.to_string())
+		Ok((result.to_string(), None))
 	}
 
 	fn spew(&self, state: &mut impl FSOBuilder) {
@@ -23,18 +23,18 @@ impl FSOTable for String {
 }
 
 impl FSOTable for bool {
-	fn parse<'a, Parser: FSOParser<'a>>(state: &Parser) -> Result<Self, FSOParsingError> {
+	fn parse<'a, Parser: FSOParser<'a>>(state: &Parser, _hanging_gobble: Option<FSOParsingHangingGobble>) -> Result<(Self, Option<FSOParsingHangingGobble>), FSOParsingError> {
 		state.consume_whitespace_inline(&[]);
 		let result = state.read_until_whitespace();
 		match result.clone().to_lowercase().as_str() {
 			"yes" | "true" | "on" => {
-				Ok(true)
+				Ok((true, None))
 			}
 			"no" | "false" | "off" => {
-				Ok(false)
+				Ok((false, None))
 			}
 			_ => {
-				Err(FSOParsingError { reason: format!("Expected boolean value, got {}.", result), line: state.line() })
+				Err(FSOParsingError { reason: format!("Expected boolean value, got {}.", result), line: state.line(), comments: None, version_string: None })
 			}
 		}
 	}
@@ -44,7 +44,7 @@ impl FSOTable for bool {
 	}
 }
 
-fn parse_number<'a, Parser: FSOParser<'a>, T: FromStr>(state: &Parser, allow_dot: bool, allow_minus: bool) -> Result<T, FSOParsingError> {
+fn parse_number<'a, Parser: FSOParser<'a>, T: FromStr>(state: &Parser, allow_dot: bool, allow_minus: bool) -> Result<(T, Option<FSOParsingHangingGobble>), FSOParsingError> {
 	state.consume_whitespace_inline(&[]);
 	let current = state.get();
 	let mut have_dot = !allow_dot;
@@ -64,18 +64,18 @@ fn parse_number<'a, Parser: FSOParser<'a>, T: FromStr>(state: &Parser, allow_dot
 	}
 
 	if to_consume == 0 {
-		return Err(FSOParsingError { reason: format!("Expected {}, got {}!", if allow_dot { "float" } else { "int" }, &current[..min(4, current.len())]), line: state.line() } );
+		return Err(FSOParsingError { reason: format!("Expected {}, got {}!", if allow_dot { "float" } else { "int" }, &current[..min(4, current.len())]), line: state.line(), comments: None, version_string: None } );
 	}
 
 	state.consume(to_consume);
 	match <T as FromStr>::from_str(&current[..to_consume]) {
-		Ok(f) => { Ok(f) },
-		Err( _ ) => { Err(FSOParsingError { reason: format!("Expected {}, got {}!", if allow_dot { "float" } else { "int" }, &current[..to_consume]), line: state.line() } ) }
+		Ok(f) => { Ok((f, None)) },
+		Err( _ ) => { Err(FSOParsingError { reason: format!("Expected {}, got {}!", if allow_dot { "float" } else { "int" }, &current[..to_consume]), line: state.line(), comments: None, version_string: None } ) }
 	}
 }
 
 impl FSOTable for f32 {
-	fn parse<'a, Parser: FSOParser<'a>>(state: &Parser) -> Result<Self, FSOParsingError> {
+	fn parse<'a, Parser: FSOParser<'a>>(state: &Parser, _hanging_gobble: Option<FSOParsingHangingGobble>) -> Result<(Self, Option<FSOParsingHangingGobble>), FSOParsingError> {
 		parse_number(state, true, true)
 	}
 
@@ -85,7 +85,7 @@ impl FSOTable for f32 {
 }
 
 impl FSOTable for f64 {
-	fn parse<'a, Parser: FSOParser<'a>>(state: &Parser) -> Result<Self, FSOParsingError> {
+	fn parse<'a, Parser: FSOParser<'a>>(state: &Parser, _hanging_gobble: Option<FSOParsingHangingGobble>) -> Result<(Self, Option<FSOParsingHangingGobble>), FSOParsingError> {
 		parse_number(state, true, true)
 	}
 
@@ -95,7 +95,7 @@ impl FSOTable for f64 {
 }
 
 impl FSOTable for i32 {
-	fn parse<'a, Parser: FSOParser<'a>>(state: &Parser) -> Result<Self, FSOParsingError> {
+	fn parse<'a, Parser: FSOParser<'a>>(state: &Parser, _hanging_gobble: Option<FSOParsingHangingGobble>) -> Result<(Self, Option<FSOParsingHangingGobble>), FSOParsingError> {
 		parse_number(state, false, true)
 	}
 
@@ -105,7 +105,7 @@ impl FSOTable for i32 {
 }
 
 impl FSOTable for i64 {
-	fn parse<'a, Parser: FSOParser<'a>>(state: &Parser) -> Result<Self, FSOParsingError> {
+	fn parse<'a, Parser: FSOParser<'a>>(state: &Parser, _hanging_gobble: Option<FSOParsingHangingGobble>) -> Result<(Self, Option<FSOParsingHangingGobble>), FSOParsingError> {
 		parse_number(state, false, true)
 	}
 
@@ -115,7 +115,7 @@ impl FSOTable for i64 {
 }
 
 impl FSOTable for u32 {
-	fn parse<'a, Parser: FSOParser<'a>>(state: &Parser) -> Result<Self, FSOParsingError> {
+	fn parse<'a, Parser: FSOParser<'a>>(state: &Parser, _hanging_gobble: Option<FSOParsingHangingGobble>) -> Result<(Self, Option<FSOParsingHangingGobble>), FSOParsingError> {
 		parse_number(state, false, false)
 	}
 
@@ -125,7 +125,7 @@ impl FSOTable for u32 {
 }
 
 impl FSOTable for u64 {
-	fn parse<'a, Parser: FSOParser<'a>>(state: &Parser) -> Result<Self, FSOParsingError> {
+	fn parse<'a, Parser: FSOParser<'a>>(state: &Parser, _hanging_gobble: Option<FSOParsingHangingGobble>) -> Result<(Self, Option<FSOParsingHangingGobble>), FSOParsingError> {
 		parse_number(state, false, false)
 	}
 

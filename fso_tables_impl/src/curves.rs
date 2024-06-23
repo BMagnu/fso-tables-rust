@@ -38,14 +38,14 @@ mod tests {
 	fn subcurve() {
 		let available_curves = BUILTIN_CURVES.iter().map(|c| c).collect::<Vec<&Curve>>();
 
-		let curve = Curve {
-			name: "".to_string(),
-			keyframes: vec![
-				CurveKeyframe{ pos: (0f32, 0f32), segment: CurveSegment::Subcurve { curve: "EaseInQuad".to_string() } },
-				CurveKeyframe{ pos: (0.5f32, 0.5f32), segment: CurveSegment::Polynomial { ease_in: Some(true), degree: 2f32 } },
-				CurveKeyframe{ pos: (1f32, 1f32), segment: CurveSegment::Constant }
+		let curve = Curve::new(
+			"".to_string(),
+			vec![
+				CurveKeyframe::new( (0f32, 0f32), CurveSegment::Subcurve { curve: "EaseInQuad".to_string() } ),
+				CurveKeyframe::new( (0.5f32, 0.5f32), CurveSegment::Polynomial { ease_in: Some(true), degree: 2f32 } ),
+				CurveKeyframe::new( (1f32, 1f32), CurveSegment::Constant )
 			]
-		};
+		);
 
 		assert!((curve.calculate(0f32, &available_curves) - 0f32).abs() < 0.001);
 		assert!((curve.calculate(0.25f32, &available_curves) - 0.125f32).abs() < 0.001);

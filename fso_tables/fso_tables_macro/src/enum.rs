@@ -26,12 +26,12 @@ pub(crate) fn fso_enum_build_parse(fields: &Fields, default_enum_case_store_in: 
 				};
 			}
 			else {
-				let (value_type, field_parser, field_spewer) = deduce_type(&FSONaming::Unnamed, &field.ty, &format_ident!("__field"))?;
+				let (value_type, field_parser, field_spewer) = deduce_type(&FSONaming::Unnamed, &field.ty, &format_ident!("__field"), &format_ident!("None"))?;
 				match value_type {
 					FSOValueType::Option { .. } => {
 						field_parsers = quote! {
 							#field_parsers
-							#ident: if let Ok(data) = #field_parser { Some(data) } else { None },
+							#ident: if let Ok((data, _)) = #field_parser { Some(data) } else { None },
 						};
 						field_spewers = quote! {
 							#field_spewers
@@ -44,7 +44,7 @@ pub(crate) fn fso_enum_build_parse(fields: &Fields, default_enum_case_store_in: 
 					_ => {
 						field_parsers = quote! {
 							#field_parsers
-							#ident: #field_parser?,
+							#ident: #field_parser?.0,
 						};
 						field_spewers = quote! {
 							#field_spewers
@@ -71,7 +71,14 @@ pub fn fso_table_enum(item_enum: &mut ItemEnum, instancing_req: Vec<TokenStream>
 	let struct_name = &item_enum.ident;
 	let (_, ty_generics, where_clause) = item_enum.generics.split_for_impl();
 
-	let mut parser = quote!(let (_, _) = state.consume_whitespace(false););
+	let mut parser = quote!{
+		let (__comments, __version_string) = if let Some(hanging_gobble) = hanging_gobble {
+			(hanging_gobble.comments, hanging_gobble.version_string)
+		} 
+		else {
+			state.consume_whitespace(false)
+		};
+	};
 	let mut spewer = quote!();
 	let mut fail_message = "Expected one of ".to_string();
 	let mut option_nr = 0;
@@ -143,18 +150,18 @@ pub fn fso_table_enum(item_enum: &mut ItemEnum, instancing_req: Vec<TokenStream>
 			has_early_out = true;
 			parser = quote! {
 				#parser
-				return Ok( #struct_name::#rust_name {
+				return Ok( (#struct_name::#rust_name {
 					#field_parsers
-				});
+				}, None));
 			};
 		}
 		else {
 			parser = quote! {
 				#parser
 				if let Ok(_) = state.consume_string(#fso_name) {
-					return Ok( #struct_name::#rust_name {
+					return Ok( (#struct_name::#rust_name {
 						#field_parsers
-					});
+					}, None));
 				}
 			};
 		}
@@ -205,7 +212,7 @@ pub fn fso_table_enum(item_enum: &mut ItemEnum, instancing_req: Vec<TokenStream>
 		quote! {
 			let current = state.get();
 			let current_cut = &current[..std::cmp::min(20, current.len())];
-			core::result::Result::Err(fso_tables::FSOParsingError { reason: format!(#fail_message, current_cut), line: state.line() })
+			core::result::Result::Err(fso_tables::FSOParsingError { reason: format!(#fail_message, current_cut), line: state.line(), comments: __comments, version_string: __version_string })
 		}
 	};
 
@@ -215,7 +222,7 @@ pub fn fso_table_enum(item_enum: &mut ItemEnum, instancing_req: Vec<TokenStream>
 
 	Ok((quote! {
 		impl fso_tables::FSOTable for #struct_name #ty_generics {
-			fn parse<#impl_with_generics>(state: &'parser Parser) -> Result<#struct_name #ty_generics, fso_tables::FSOParsingError> #where_clause_with_parser{
+			fn parse<#impl_with_generics>(state: &'parser Parser, hanging_gobble: Option<fso_tables::FSOParsingHangingGobble>) -> Result<(Self, Option<fso_tables::FSOParsingHangingGobble>), fso_tables::FSOParsingError> #where_clause_with_parser{
 				#parser
 				#fail_return
 			}
@@ -229,7 +236,8 @@ pub fn fso_table_enum(item_enum: &mut ItemEnum, instancing_req: Vec<TokenStream>
 	quote! { 
 		impl #struct_name #ty_generics {
 			pub fn parse<Parser>(parser: Parser) -> Result<Self, fso_tables::FSOParsingError> where Parser: for<'a> fso_tables::FSOParser<'a> { 
-				fso_tables::FSOTable::parse(&parser)
+				let (parse, _) = fso_tables::FSOTable::parse(&parser, None)?;
+				parse
 			}
 			pub fn spew(&self) -> String {
 				let mut parser = fso_tables::FSOTableBuilder::default();

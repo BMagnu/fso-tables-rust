@@ -23,7 +23,7 @@ pub(crate) enum FSOValueType<'a> {
 	Tuple {inner: Vec<FSOValueType<'a>>}
 }
 
-pub(crate) fn deduce_type<'a>(name: &FSONaming, ty: &'a Type, to_spew_name: &Ident) -> Result<(FSOValueType<'a>, TokenStream, TokenStream), Error>{
+pub(crate) fn deduce_type<'a>(name: &FSONaming, ty: &'a Type, to_spew_name: &Ident, hanging_gobble: &Ident) -> Result<(FSOValueType<'a>, TokenStream, TokenStream), Error>{
 	match ty {
 		Type::Path( TypePath { path: Path { segments, .. }, ..} ) => {
 			assert!(!segments.is_empty());
@@ -34,7 +34,7 @@ pub(crate) fn deduce_type<'a>(name: &FSONaming, ty: &'a Type, to_spew_name: &Ide
 						"Vec" => {
 							let multiline = if let FSONaming::Named { multiline, ..} = name { *multiline } else if *name == FSONaming::Unnamed { true } else { false };
 							
-							let (inner_type, make_containing, spew_containing) = deduce_type(name, inner, &format_ident!("__to_spew"))?;
+							let (inner_type, make_containing, spew_containing) = deduce_type(name, inner, &format_ident!("__to_spew"), &format_ident!("__last_hanging_gobble"))?;
 							if let FSOValueType::Option { .. } = inner_type {
 								return Err(Error::new(inner.span(), "FSO Tables cannot contain a Vector of Options. Consider adding a subtable with optional unnamed elements."));
 							}
@@ -43,11 +43,31 @@ pub(crate) fn deduce_type<'a>(name: &FSONaming, ty: &'a Type, to_spew_name: &Ide
 								{
 									let mut __vec_to_fill = Vec::new();
 									state.consume_whitespace_inline(&['(']);
-									while let Ok(__new_element_for_vec) = #make_containing {
-										__vec_to_fill.push(__new_element_for_vec);
+									let mut __comment_inner;
+									let mut __version_string_inner;
+									let mut __already_parsed_comments_inner = false;
+									let mut __last_hanging_gobble = None;
+									
+									loop {
+										let __new_element_for_vec = #make_containing;
+										match __new_element_for_vec {
+											Ok((__new_element_for_vec, __inner_gobble)) => { 
+												__last_hanging_gobble = __inner_gobble;
+												__vec_to_fill.push(__new_element_for_vec) 
+											}
+											Err(fso_tables::FSOParsingError{ comments, version_string, .. }) => {
+												__comment_inner = comments;
+												__version_string_inner = version_string;
+												__already_parsed_comments_inner = true;
+												break;
+											}
+										}
 									}
+									
 									state.consume_whitespace_inline(&[')']);
-									Ok(__vec_to_fill)
+									Ok((__vec_to_fill, if __already_parsed_comments_inner { 
+										Some(fso_tables::FSOParsingHangingGobble { comments: __comment_inner, version_string: __version_string_inner })
+									} else { None }))
 								}
 							};
 
@@ -89,7 +109,7 @@ pub(crate) fn deduce_type<'a>(name: &FSONaming, ty: &'a Type, to_spew_name: &Ide
 							Ok((FSOValueType::Vector { inner }, make_value, spew_value))
 						}
 						"Option" => {
-							let (inner_type, make_containing, spew_containing) = deduce_type(name, inner, to_spew_name)?;
+							let (inner_type, make_containing, spew_containing) = deduce_type(name, inner, to_spew_name, hanging_gobble)?;
 							if let FSOValueType::Option { .. } | FSOValueType::Container { .. } = inner_type {
 								return Err(Error::new(inner.span(), "FSO Tables cannot contain an Option of Options or Box-likes. Consider reversing the template order."));
 							}
@@ -100,13 +120,13 @@ pub(crate) fn deduce_type<'a>(name: &FSONaming, ty: &'a Type, to_spew_name: &Ide
 							Ok((FSOValueType::Option { inner }, make_value, spew_value))
 						}
 						"Box" | "Rc" | "Arc" | "Cell" | "RefCell" => {
-							let (inner_type, make_containing, spew_containing) = deduce_type(name, inner, &format_ident!("__box_contained"))?;
+							let (inner_type, make_containing, spew_containing) = deduce_type(name, inner, &format_ident!("__box_contained"), hanging_gobble)?;
 							if let FSOValueType::Option { .. } = inner_type {
 								return Err(Error::new(inner.span(), "FSO Tables cannot contain a Box-like of Options. Consider reversing the template order."));
 							}
 							
 							let container = &typename.ident;
-							let make_value = quote!(#make_containing.map(|containing| #container::new(containing)));
+							let make_value = quote!(#make_containing.map(|(containing, hanging)| (#container::new(containing), hanging)));
 							let spew_value = quote!{
 								{
 									let __box_contained = &#to_spew_name.as_ref();
@@ -117,7 +137,7 @@ pub(crate) fn deduce_type<'a>(name: &FSONaming, ty: &'a Type, to_spew_name: &Ide
 							Ok((FSOValueType::Container { inner, container }, make_value, spew_value))
 						}
 						_ => {
-							let make_value = quote! (<#ty as fso_tables::FSOTable>::parse(state));
+							let make_value = quote! (<#ty as fso_tables::FSOTable>::parse(state, #hanging_gobble));
 							let spew_value = quote! (<#ty as fso_tables::FSOTable>::spew(#to_spew_name, state););
 							Ok((FSOValueType::Generic { ty }, make_value, spew_value))
 						}
@@ -127,7 +147,7 @@ pub(crate) fn deduce_type<'a>(name: &FSONaming, ty: &'a Type, to_spew_name: &Ide
 					Err(Error::new(ty.span(), format!("FSO Tables encountered type {} with non-type generic argument!", typename.ident)))
 				}
 			} else {
-				let make_value = quote! (<#ty as fso_tables::FSOTable>::parse(state));
+				let make_value = quote! (<#ty as fso_tables::FSOTable>::parse(state, #hanging_gobble));
 				let spew_value = quote! (<#ty as fso_tables::FSOTable>::spew(#to_spew_name, state););
 				Ok((FSOValueType::Direct { ty }, make_value, spew_value))
 			}
@@ -139,21 +159,21 @@ pub(crate) fn deduce_type<'a>(name: &FSONaming, ty: &'a Type, to_spew_name: &Ide
 			let mut count = 0;
 
 			for inner in elems {
-				let (inner_type, make_containing, spew_containing) = deduce_type(name, inner, &format_ident!("__current_enum"))?;
+				let (spew_comma, hanging_gobble) = if count == 0 {
+					(quote!(), hanging_gobble.clone())
+				}
+				else {
+					(quote!(state.append(", ");), format_ident!("None"))
+				};
+				
+				let (inner_type, make_containing, spew_containing) = deduce_type(name, inner, &format_ident!("__current_enum"), &hanging_gobble)?;
 				if let FSOValueType::Option { .. } = inner_type {
 					return Err(Error::new(inner.span(), "FSO Tables cannot yet contain Options."));
 				}
 				types.push(inner_type);
 				parser = quote!{
 					#parser
-					#make_containing?,
-				};
-
-				let spew_comma = if count == 0 {
-					quote!()
-				}
-				else {
-					quote!(state.append(", ");)
+					#make_containing?.0,
 				};
 
 				let count_name = Index::from(count);
@@ -172,7 +192,7 @@ pub(crate) fn deduce_type<'a>(name: &FSONaming, ty: &'a Type, to_spew_name: &Ide
 
 			let parse_value = quote!{ (|| {
 				state.consume_whitespace_inline(&['(']);
-				let __tuple_result = Ok((#parser));
+				let __tuple_result = Ok(((#parser), None::<fso_tables::FSOParsingHangingGobble>));
 				state.consume_whitespace_inline(&[')']);
 				__tuple_result
 			})() };

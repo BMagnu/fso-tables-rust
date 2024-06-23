@@ -1,4 +1,4 @@
-use fso_tables::{fso_table, FSOBuilder, FSOParser, FSOParsingError, FSOTable};
+use fso_tables::{fso_table, FSOBuilder, FSOParser, FSOParsingError, FSOParsingHangingGobble, FSOTable};
 use crate::{Angles, Vec3D};
 
 #[fso_table(toplevel)]
@@ -33,7 +33,7 @@ pub struct Animation {
 
 pub struct Moveable;
 impl FSOTable for Moveable {
-	fn parse<'a, Parser: FSOParser<'a>>(state: &'a Parser) -> Result<Self, FSOParsingError> { Err(FSOParsingError{ line: state.line(), reason: "Unimplemented!".to_string() })}
+	fn parse<'a, Parser: FSOParser<'a>>(state: &'a Parser, _hanging_gobble: Option<FSOParsingHangingGobble>) -> Result<(Self, Option<FSOParsingHangingGobble>), FSOParsingError> { Err(FSOParsingError{ line: state.line(), reason: "Unimplemented!".to_string(), comments: None, version_string: None })}
 	fn spew(&self, _state: &mut impl FSOBuilder) { }
 }
 

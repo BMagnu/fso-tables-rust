@@ -1,7 +1,8 @@
 use proc_macro2::{Ident, Span, TokenStream};
 use quote::{format_ident, quote};
 use regex::Regex;
-use syn::{Error, Expr, ExprLit, ItemStruct, Lit, Meta, MetaNameValue, Type};
+use syn::{Error, Expr, ExprLit, Field, ItemStruct, Lit, Meta, MetaNameValue, Type};
+use syn::parse::Parser;
 use syn::spanned::Spanned;
 use crate::typehandler::{deduce_type, FSONaming, FSOValueType};
 use crate::util::{fso_build_impl_generics, fso_build_where_clause};
@@ -11,23 +12,22 @@ pub(crate) struct TableField {
 	fso_gobble: Option<String>,
 	rust_token: Ident,
 	rust_type: Type,
-	rust_span: Span
+	rust_span: Span,
+	field_number: usize
 }
 
 pub(crate) fn fso_struct_build_parse(fields: &Vec<TableField>, inline: bool) -> Result<(TokenStream, TokenStream, TokenStream), Error> {
-	let mut parse = if inline {
-		quote!()
-	} 
-	else {
-		quote! {
-			let mut __already_parsed_comments = false;
-			let (mut __comments, mut __version_string) = (None, None);
-		}
-	};
+	let mut parse = quote! ();
 	let mut fill = TokenStream::new();
 	let mut spew = TokenStream::new();
+	
+	let or_else_fail = quote! {.map_err(|mut err: fso_tables::FSOParsingError| {
+		err.comments = __comment.clone();
+		err.version_string = __version_string.clone();
+		err
+	})?};
 
-	for (_field_num, field) in fields.iter().enumerate() {
+	for field in fields.iter() {
 		let name = &field.rust_token;
 
 		if let FSONaming::Skipped = field.fso_name {
@@ -46,21 +46,24 @@ pub(crate) fn fso_struct_build_parse(fields: &Vec<TableField>, inline: bool) -> 
 			process_comments = quote!{};
 		}
 		else {
+			let field_num = field.field_number;
 			parse_comments = quote!{
 				if !__already_parsed_comments {
-					(__comments, __version_string) = state.consume_whitespace(false);
+					(__comment, __version_string) = state.consume_whitespace(false);
+					__already_parsed_comments = true;
 				}	
 			};
 			process_comments = quote!{
 				__already_parsed_comments = false;
-				//TODO process __comments, __version_string
+				__comments[#field_num] = __comment.clone();
+				__version_strings[#field_num] = __version_string.clone();
 			};
 		}
 
 		let parse_gobble = if let Some(gobble) = &field.fso_gobble {
 			quote! {
 				state.consume_whitespace_inline(&[]);
-				state.consume_string(#gobble)?;
+				state.consume_string(#gobble)#or_else_fail;
 			}
 		}
 		else {
@@ -76,7 +79,15 @@ pub(crate) fn fso_struct_build_parse(fields: &Vec<TableField>, inline: bool) -> 
 			quote!(state.append(" ");)
 		};
 
-		let (value_type, make_type, spew_type) = deduce_type(&field.fso_name, &field.rust_type, &format_ident!("__to_spew"))?;
+		let parse_inner_gobble = quote!{
+			if let Some(__inner_gobble) = __inner_gobble {
+				__comment = __inner_gobble.comments;
+				__version_string = __inner_gobble.version_string;
+				__already_parsed_comments = true;
+			}
+		};
+		
+		let (value_type, make_type, spew_type) = deduce_type(&field.fso_name, &field.rust_type, &format_ident!("__to_spew"), &format_ident!("None"))?;
 		let (parse_value, spew_value) = match &field.fso_name {
 			FSONaming::Named { fso_name, .. } => {
 				match value_type {
@@ -84,9 +95,10 @@ pub(crate) fn fso_struct_build_parse(fields: &Vec<TableField>, inline: bool) -> 
 						(quote!{
 							let #name = if let Ok(_) = state.consume_string(#fso_name) {
 								#process_comments
-								let __opt_result = Some(#make_type?); //Named Optionals must be parseable
+								let (__opt_result, __inner_gobble) = #make_type #or_else_fail; //Named Optionals must be parseable
+								#parse_inner_gobble
 								#parse_gobble
-								__opt_result
+								Some(__opt_result)
 							}
 							else {
 								None
@@ -104,9 +116,10 @@ pub(crate) fn fso_struct_build_parse(fields: &Vec<TableField>, inline: bool) -> 
 					}
 					_ => {
 						(quote!{
-							state.consume_string(#fso_name)?;
+							state.consume_string(#fso_name)#or_else_fail;
 							#process_comments
-							let #name = #make_type?;
+							let (#name, __inner_gobble) = #make_type #or_else_fail;
+							#parse_inner_gobble
 							#parse_gobble
 						},
 						quote!{
@@ -126,8 +139,9 @@ pub(crate) fn fso_struct_build_parse(fields: &Vec<TableField>, inline: bool) -> 
 				match value_type {
 					FSOValueType::Option { .. } => {
 						(quote!{
-							let #name = if let Ok(data) = #make_type { //Unnamed Optionals can fail during parsing itself, that's assumed to be "non-existant"
+							let #name = if let Ok((data, __inner_gobble)) = #make_type { //Unnamed Optionals can fail during parsing itself, that's assumed to be "non-existant"
 								#process_comments
+								#parse_inner_gobble
 								#parse_gobble
 								Some(data)
 							}
@@ -145,7 +159,8 @@ pub(crate) fn fso_struct_build_parse(fields: &Vec<TableField>, inline: bool) -> 
 					_ => {
 						(quote!{
 							#process_comments
-							let #name = #make_type?;
+							let (#name, __inner_gobble) = #make_type #or_else_fail;
+							#parse_inner_gobble
 							#parse_gobble
 						},
 						quote!{
@@ -162,9 +177,9 @@ pub(crate) fn fso_struct_build_parse(fields: &Vec<TableField>, inline: bool) -> 
 				match value_type {
 					FSOValueType::Direct { ty: Type::Path( path ) } if path.path.is_ident("bool") => {
 						(quote!{
-							#process_comments
 							let #name = state.consume_string(#fso_name).is_ok();
 							if #name {
+								#process_comments
 								#parse_gobble
 							}
 						},
@@ -208,7 +223,9 @@ pub(crate) fn fso_table_struct(item_struct: &mut ItemStruct, instancing_req: Vec
 	let mut table_fields: Vec<TableField> = Vec::new();
 	let struct_name = &item_struct.ident;
 	let (_, ty_generics, where_clause) = item_struct.generics.split_for_impl();
-
+	let mut field_count: usize = if table_prefix.is_some() { 1 } else { 0 };
+	let mut field_comma_list = quote!();
+	
 	if let syn::Fields::Named(ref mut fields) = item_struct.fields {
 		for field in fields.named.iter_mut() {
 			let rust_type = field.ty.clone();
@@ -299,13 +316,19 @@ pub(crate) fn fso_table_struct(item_struct: &mut ItemStruct, instancing_req: Vec
 					fso_name = FSONaming::Unnamed;
 				}
 
-				table_fields.push(TableField { fso_name, fso_gobble, rust_token: ident.clone(), rust_type, rust_span: field.span() });
+				field_comma_list = quote!{
+					#field_comma_list #ident: #rust_type,
+				};
+				
+				table_fields.push(TableField { fso_name, fso_gobble, rust_token: ident.clone(), rust_type, rust_span: field.span(), field_number: field_count });
+				field_count += 1;
 			}
 		}
-		/*fields.named.push(
-			syn::Field::parse_named
-				.parse2(quote! { __unknown_fso_fields: Vec<String> })?,
-		);*/
+
+		field_count += if table_prefix.is_some() { 1 } else { 0 };
+		
+		fields.named.push(Field::parse_named.parse2(quote! { __comments: [Option<String>; #field_count] })?);
+		fields.named.push(Field::parse_named.parse2(quote! { __version_strings: [Option<String>; #field_count] })?);
 	}
 	else {
 		return Err(Error::new(item_struct.fields.span(), "A struct annotated with fso_table must have named fields!"));
@@ -319,8 +342,17 @@ pub(crate) fn fso_table_struct(item_struct: &mut ItemStruct, instancing_req: Vec
 
 	let (prefix_parser, prefix_spewer) = if let Some(prefix) = table_prefix{
 		(quote! {
-			let (_, _) = state.consume_whitespace(false);
-			state.consume_string(#prefix)?;
+			if !__already_parsed_comments {
+				(__comment, __version_string) = state.consume_whitespace(false);
+			}
+			__comments[0] = __comment.clone();
+			__version_strings[0] = __version_string.clone();
+			__already_parsed_comments = false;
+			state.consume_string(#prefix).map_err(|mut err: fso_tables::FSOParsingError| {
+				err.comments = __comment.clone();
+				err.version_string = __version_string.clone();
+				err
+			})?;
 		}, quote! {
 			state.append(#prefix);
 			state.append("\n\n");
@@ -330,8 +362,14 @@ pub(crate) fn fso_table_struct(item_struct: &mut ItemStruct, instancing_req: Vec
 		(quote!{}, quote!{})
 	};
 	let (suffix_parser, suffix_spewer) = if let Some(suffix) = table_suffix{
+		let suffix_field = field_count - 1;
 		(quote! {
-			let (_, _) = state.consume_whitespace(false);
+			if !__already_parsed_comments {
+				(__comment, __version_string) = state.consume_whitespace(false);
+			}
+			__comments[#suffix_field] = __comment.clone();
+			__version_strings[#suffix_field] = __version_string.clone();
+			__already_parsed_comments = true;
 			state.consume_string(#suffix)?;
 		}, quote! {
 			state.append("\n\n");
@@ -344,13 +382,26 @@ pub(crate) fn fso_table_struct(item_struct: &mut ItemStruct, instancing_req: Vec
 
 	Ok((quote! {
 		impl fso_tables::FSOTable for #struct_name #ty_generics  {
-			fn parse<#impl_with_generics>(state: &'parser Parser) -> Result<#struct_name #ty_generics, fso_tables::FSOParsingError> #where_clause_with_parser {
+			fn parse<#impl_with_generics>(state: &'parser Parser, hanging_gobble: Option<fso_tables::FSOParsingHangingGobble>) -> Result<(Self, Option<fso_tables::FSOParsingHangingGobble>), fso_tables::FSOParsingError> #where_clause_with_parser {
+				const NONE_ARRAY_REPEAT_VALUE: Option<String> = None;
+				let mut __comments = [NONE_ARRAY_REPEAT_VALUE; #field_count];
+				let mut __version_strings = [NONE_ARRAY_REPEAT_VALUE; #field_count];
+				let (mut __comment, mut __version_string, mut __already_parsed_comments) = if let Some(hanging_gobble) = hanging_gobble {
+					(hanging_gobble.comments, hanging_gobble.version_string, true)
+				} 
+				else { (None, None, false) };
 				#prefix_parser
 				#parser
 				#suffix_parser
-				core::result::Result::Ok(#struct_name {
+				let __hanging_comments = if __already_parsed_comments { Some(fso_tables::FSOParsingHangingGobble {
+					comments: __comment,
+					version_string: __version_string
+				}) } else { None };
+				core::result::Result::Ok((#struct_name {
 					#filler
-				})
+					__comments,
+					__version_strings
+				}, __hanging_comments))
 			}
 			fn spew(&self, state: &mut impl fso_tables::FSOBuilder) {
 				#prefix_spewer
@@ -358,11 +409,22 @@ pub(crate) fn fso_table_struct(item_struct: &mut ItemStruct, instancing_req: Vec
 				#suffix_spewer
 			}
 		}
+		impl #struct_name #ty_generics {
+			pub fn new(#field_comma_list) -> Self{
+				const NONE_ARRAY_REPEAT_VALUE: Option<String> = None;
+				#struct_name {
+					#filler
+					__comments: [NONE_ARRAY_REPEAT_VALUE; #field_count],
+					__version_strings: [NONE_ARRAY_REPEAT_VALUE; #field_count]
+				}
+			}	
+		}
 	}, 
 	quote! { 
 		impl #struct_name #ty_generics {
 			pub fn parse<Parser>(parser: Parser) -> Result<Self, fso_tables::FSOParsingError> where Parser: for<'a> fso_tables::FSOParser<'a> { 
-				fso_tables::FSOTable::parse(&parser)
+				let (parse, _) = fso_tables::FSOTable::parse(&parser, None)?;
+				Ok(parse)
 			}
 			pub fn spew(&self) -> String {
 				let mut parser = fso_tables::FSOTableBuilder::default();

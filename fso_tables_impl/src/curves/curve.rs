@@ -42,10 +42,10 @@ impl Curve {
 }
 impl Default for Curve {
 	fn default() -> Self { 
-		Curve { name: "".to_string(), keyframes: vec![
-			CurveKeyframe { pos: (0f32, 0f32), segment: CurveSegment::Linear },
-			CurveKeyframe { pos: (1f32, 1f32), segment: CurveSegment::Constant }
-		]} 
+		Curve::new("".to_string(), vec![
+			CurveKeyframe::new((0f32, 0f32), CurveSegment::Linear ),
+			CurveKeyframe::new((1f32, 1f32), CurveSegment::Constant )
+		]) 
 	}
 }
 

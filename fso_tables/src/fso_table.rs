@@ -12,7 +12,9 @@ use regex::Regex;
 #[derive(Debug)]
 pub struct FSOParsingError {
 	pub line: usize,
-	pub reason: String
+	pub reason: String,
+	pub comments: Option<String>,
+	pub version_string: Option<String>
 }
 
 impl Display for FSOParsingError {
@@ -146,7 +148,7 @@ pub trait FSOParser<'a> {
 		}
 		else { 
 			let current = self.get();
-			Err( FSOParsingError { reason: format!("Expected \"{}\", got {}", expect, &current[..min(current.len(), expect.len())]), line: self.line() } )
+			Err( FSOParsingError { reason: format!("Expected \"{}\", got {}", expect, &current[..min(current.len(), expect.len())]), line: self.line(), comments: None, version_string: None } )
 		}
 	}
 }
@@ -186,12 +188,12 @@ impl FSOTableFileParser {
 		
 		let mut file = match File::open(&path) {
 			Ok(file) => { file }
-			Err(err) => { return Err( FSOParsingError { reason: format!("Could not open file {}! Reason: {}.", path.to_string_lossy(), err), line: 0 }) }
+			Err(err) => { return Err( FSOParsingError { reason: format!("Could not open file {}! Reason: {}.", path.to_string_lossy(), err), line: 0, comments: None, version_string: None }) }
 		};
 
 		match file.read_to_string(&mut s) {
 			Ok(_) => {  }
-			Err(err) => { return Err( FSOParsingError { reason: format!("Could not read from file {}! Reason: {}.", path.to_string_lossy(), err), line: 0 }) }
+			Err(err) => { return Err( FSOParsingError { reason: format!("Could not read from file {}! Reason: {}.", path.to_string_lossy(), err), line: 0, comments: None, version_string: None }) }
 		};
 
 		let parser = FSOTableFileParser {
@@ -246,7 +248,12 @@ impl FSOBuilder for FSOTableBuilder {
 	}
 }
 
+pub struct FSOParsingHangingGobble {
+	pub comments: Option<String>,
+	pub version_string: Option<String>
+}
+
 pub trait FSOTable {
-	fn parse<'parser, Parser: FSOParser<'parser>>(state: &'parser Parser) -> Result<Self, FSOParsingError> where Self: Sized;
+	fn parse<'parser, Parser: FSOParser<'parser>>(state: &'parser Parser, hanging_gobble: Option<FSOParsingHangingGobble>) -> Result<(Self, Option<FSOParsingHangingGobble>), FSOParsingError> where Self: Sized;
 	fn spew(&self, state: &mut impl FSOBuilder);
 }
