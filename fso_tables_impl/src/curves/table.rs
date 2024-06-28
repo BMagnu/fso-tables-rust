@@ -24,6 +24,7 @@ pub struct CurveKeyframe {
 }
 
 #[fso_table(enum_field_spacing=", ")]
+#[derive(PartialEq)]
 pub enum CurveSegment{
 	Constant,
 	Linear,
