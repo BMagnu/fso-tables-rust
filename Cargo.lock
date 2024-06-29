@@ -13,7 +13,7 @@ dependencies = [
 
 [[package]]
 name = "fso_tables"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "fso_tables_macro",
  "regex",
@@ -21,7 +21,7 @@ dependencies = [
 
 [[package]]
 name = "fso_tables_impl"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "fso_tables",
  "once_cell",
@@ -31,7 +31,7 @@ dependencies = [
 
 [[package]]
 name = "fso_tables_macro"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "proc-macro2",
  "quote",
