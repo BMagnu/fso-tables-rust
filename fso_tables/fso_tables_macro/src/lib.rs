@@ -120,6 +120,7 @@ pub fn fso_table(args: proc_macro::TokenStream, input: proc_macro::TokenStream) 
 	let top_level_impl = if toplevel { top_level_impl } else { quote!() };
 	
 	return quote! {
+		#[derive(Clone)]
         #item
         #post_item_out
 		#top_level_impl

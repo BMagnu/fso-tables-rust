@@ -31,6 +31,7 @@ pub struct Animation {
 	pub segment: AnimationSegment
 }
 
+#[derive(Clone)]
 pub struct Moveable;
 impl FSOTable for Moveable {
 	fn parse<'a, Parser: FSOParser<'a>>(state: &'a Parser, _hanging_gobble: Option<FSOParsingHangingGobble>) -> Result<(Self, Option<FSOParsingHangingGobble>), FSOParsingError> { Err(FSOParsingError{ line: state.line(), reason: "Unimplemented!".to_string(), comments: None, version_string: None })}
